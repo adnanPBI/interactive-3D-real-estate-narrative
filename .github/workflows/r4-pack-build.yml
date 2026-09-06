@@ -1,0 +1,45 @@
+name: R4 Cinematic Pack Build
+
+on:
+  push:
+    branches: ["release/r4-cinematic"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Reconstruct verified R4 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/convalt-r4
+          mkdir -p /tmp/convalt-r4
+          cat .r4-pack/chunk-* | base64 -d > /tmp/convalt-r4/source.tar.xz
+          echo "8c10879d32ab7045630b26c5a4bc7e5272960d378280baa767c515cab3b728c7  /tmp/convalt-r4/source.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/convalt-r4/source.tar.xz -C /tmp/convalt-r4
+      - name: Install exact Node dependencies
+        working-directory: /tmp/convalt-r4
+        run: npm ci
+      - name: Install asset-generator dependencies
+        working-directory: /tmp/convalt-r4
+        run: python3 -m pip install --disable-pip-version-check -r requirements-assets.txt
+      - name: Generate R4 cinematic assets
+        working-directory: /tmp/convalt-r4
+        run: python3 scripts/generate-r4-assets.py
+      - name: Typecheck
+        working-directory: /tmp/convalt-r4
+        run: npm run typecheck
+      - name: R4 validation
+        working-directory: /tmp/convalt-r4
+        run: npm run validate:corporate:r4
+      - name: Production build
+        working-directory: /tmp/convalt-r4
+        env:
+          VERCEL: "1"
+        run: npm run build
