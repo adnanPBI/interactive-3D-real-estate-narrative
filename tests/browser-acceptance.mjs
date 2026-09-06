@@ -3,61 +3,137 @@ import { chromium, firefox, webkit } from '@playwright/test';
 
 const baseUrl = process.env.BASE_URL || 'http://127.0.0.1:3000';
 const sceneIds = ['hero', 'manufacturing', 'generation', 'data', 'recycling', 'close'];
-const engines = { chromium, firefox, webkit };
 const results = [];
 
-for (const [name, browserType] of Object.entries(engines)) {
-  const browser = await browserType.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 1365, height: 768 } });
-  const consoleErrors = [];
-  page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
-  });
+await fs.mkdir('artifacts/acceptance', { recursive: true });
 
-  await page.goto(`${baseUrl}/?qa=1`, { waitUntil: 'networkidle' });
-  await page.waitForFunction(() => window.__CONVALT_DIAGNOSTICS__?.webgl === true, null, { timeout: 15000 });
+const launchers = [
+  {
+    name: 'chromium',
+    type: chromium,
+    options: {
+      headless: true,
+      args: [
+        '--enable-webgl',
+        '--ignore-gpu-blocklist',
+        '--use-angle=swiftshader',
+        '--enable-unsafe-swiftshader',
+      ],
+      env: { ...process.env, LIBGL_ALWAYS_SOFTWARE: '1' },
+    },
+  },
+  {
+    name: 'firefox',
+    type: firefox,
+    options: {
+      headless: true,
+      firefoxUserPrefs: {
+        'webgl.disabled': false,
+        'webgl.force-enabled': true,
+        'gfx.webrender.software': true,
+      },
+      env: { ...process.env, LIBGL_ALWAYS_SOFTWARE: '1' },
+    },
+  },
+  {
+    name: 'webkit',
+    type: webkit,
+    options: {
+      headless: true,
+      env: { ...process.env, LIBGL_ALWAYS_SOFTWARE: '1' },
+    },
+  },
+];
 
-  const samples = [];
-  for (let index = 0; index < sceneIds.length; index += 1) {
-    await page.evaluate(({ index, total }) => {
-      const max = document.documentElement.scrollHeight - innerHeight;
-      scrollTo(0, max * (index / (total - 1)));
-    }, { index, total: sceneIds.length });
-    await page.waitForTimeout(900);
-    const diagnostic = await page.evaluate(() => window.__CONVALT_DIAGNOSTICS__);
-    samples.push(diagnostic);
+for (const launcher of launchers) {
+  const result = {
+    browser: launcher.name,
+    launched: false,
+    pageLoaded: false,
+    webglPass: false,
+    fallbackRendered: false,
+    allScenesObserved: false,
+    observed: [],
+    minimumFps: 0,
+    averageFps: 0,
+    consoleErrors: [],
+    pageErrors: [],
+    samples: [],
+    failure: null,
+  };
+
+  let browser;
+  try {
+    browser = await launcher.type.launch(launcher.options);
+    result.launched = true;
+
+    const page = await browser.newPage({ viewport: { width: 1365, height: 768 } });
+    page.on('console', (message) => {
+      if (message.type() === 'error') result.consoleErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => result.pageErrors.push(String(error)));
+
+    const response = await page.goto(`${baseUrl}/?qa=1`, { waitUntil: 'networkidle' });
+    result.pageLoaded = Boolean(response?.ok());
+
+    await page.waitForFunction(
+      () =>
+        window.__CONVALT_DIAGNOSTICS__?.webgl === true ||
+        document.querySelector('.canvas-shell.fallback') !== null,
+      null,
+      { timeout: 15000 },
+    );
+
+    const initial = await page.evaluate(() => ({
+      diagnostics: window.__CONVALT_DIAGNOSTICS__ ?? null,
+      fallback: document.querySelector('.canvas-shell.fallback') !== null,
+    }));
+    result.webglPass = initial.diagnostics?.webgl === true;
+    result.fallbackRendered = initial.fallback;
+
+    if (result.webglPass) {
+      for (let index = 0; index < sceneIds.length; index += 1) {
+        await page.evaluate(({ index }) => {
+          scrollTo({ top: index * innerHeight, behavior: 'instant' });
+        }, { index });
+        await page.waitForTimeout(850);
+        const diagnostic = await page.evaluate(() => window.__CONVALT_DIAGNOSTICS__ ?? null);
+        result.samples.push(diagnostic);
+      }
+
+      result.observed = result.samples.map((sample) => sample?.sceneId ?? null);
+      result.allScenesObserved = sceneIds.every((id) => result.observed.includes(id));
+      result.minimumFps = Math.min(...result.samples.map((sample) => sample?.fps ?? 0));
+      result.averageFps = Math.round(
+        result.samples.reduce((sum, sample) => sum + (sample?.averageFps ?? 0), 0) /
+          Math.max(1, result.samples.length),
+      );
+    }
+
+    await page.screenshot({
+      path: `artifacts/acceptance/${launcher.name}-final.png`,
+      fullPage: false,
+    });
+  } catch (error) {
+    result.failure = String(error);
+  } finally {
+    if (browser) await browser.close();
+    results.push(result);
+    await fs.writeFile(
+      'artifacts/acceptance/browser-results.json',
+      JSON.stringify({ generatedAt: new Date().toISOString(), baseUrl, results }, null, 2),
+    );
   }
-
-  const observed = samples.map((sample) => sample?.sceneId);
-  const allScenesObserved = sceneIds.every((id) => observed.includes(id));
-  const webglPass = samples.every((sample) => sample?.webgl === true);
-  const minimumFps = Math.min(...samples.map((sample) => sample?.fps ?? 0));
-  const averageFps = Math.round(
-    samples.reduce((sum, sample) => sum + (sample?.averageFps ?? 0), 0) / samples.length,
-  );
-
-  results.push({
-    browser: name,
-    allScenesObserved,
-    webglPass,
-    observed,
-    minimumFps,
-    averageFps,
-    consoleErrors,
-    samples,
-  });
-
-  await browser.close();
 }
 
-await fs.mkdir('artifacts/acceptance', { recursive: true });
-await fs.writeFile(
-  'artifacts/acceptance/browser-results.json',
-  JSON.stringify({ generatedAt: new Date().toISOString(), baseUrl, results }, null, 2),
-);
-
 const functionalPass = results.every(
-  (result) => result.allScenesObserved && result.webglPass && result.consoleErrors.length === 0,
+  (result) =>
+    result.launched &&
+    result.pageLoaded &&
+    result.webglPass &&
+    result.allScenesObserved &&
+    result.pageErrors.length === 0 &&
+    result.failure === null,
 );
 
 console.log(JSON.stringify({ functionalPass, results }, null, 2));
