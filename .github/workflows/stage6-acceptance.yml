@@ -46,7 +46,7 @@ jobs:
           exit 1
 
       - name: Run Chromium Firefox WebKit acceptance
-        run: npm run qa:browser
+        run: xvfb-run -a npm run qa:browser
         env:
           BASE_URL: http://127.0.0.1:3000
 
