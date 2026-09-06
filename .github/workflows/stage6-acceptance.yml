@@ -1,0 +1,62 @@
+name: Stage 6 Browser Acceptance
+
+on:
+  push:
+    branches:
+      - release/stage6
+  workflow_dispatch:
+
+jobs:
+  build-and-browser-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERCEL: "1"
+      NODE_ENV: production
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build with Vercel-compatible Next config
+        run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Start release candidate
+        run: |
+          npm run start -- -p 3000 > /tmp/convalt-next.log 2>&1 &
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/convalt-next.log
+          exit 1
+
+      - name: Run Chromium Firefox WebKit acceptance
+        run: npm run qa:browser
+        env:
+          BASE_URL: http://127.0.0.1:3000
+
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage6-browser-acceptance
+          path: |
+            artifacts/acceptance/browser-results.json
+            /tmp/convalt-next.log
+          if-no-files-found: warn
