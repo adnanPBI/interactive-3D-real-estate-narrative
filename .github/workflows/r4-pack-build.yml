@@ -1,4 +1,4 @@
-name: R4 Cinematic Pack Build
+name: R4 Cinematic Build
 
 on:
   push:
@@ -10,35 +10,88 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Reconstruct verified R4 source
+
+      - name: Reconstruct verified R4 deploy source
         shell: bash
         run: |
           set -euo pipefail
           rm -rf /tmp/convalt-r4
-          mkdir -p /tmp/convalt-r4
-          cat .r4-pack/chunk-* | base64 -d > /tmp/convalt-r4/source.tar.xz
-          echo "8c10879d32ab7045630b26c5a4bc7e5272960d378280baa767c515cab3b728c7  /tmp/convalt-r4/source.tar.xz" | sha256sum -c -
-          tar -xJf /tmp/convalt-r4/source.tar.xz -C /tmp/convalt-r4
-      - name: Install exact Node dependencies
-        working-directory: /tmp/convalt-r4
+          mkdir -p /tmp/convalt-r4/src
+          : > /tmp/convalt-r4/source.tar.xz
+          for f in .r4bin/chunk-*.b64; do
+            echo "decoding $f"
+            base64 -d "$f" >> /tmp/convalt-r4/source.tar.xz
+          done
+          echo "c76cde68cd39d1557a30e9d1d6c59463b00e73e0c6bab1ab8568ab1b42dd3a02  /tmp/convalt-r4/source.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/convalt-r4/source.tar.xz -C /tmp/convalt-r4/src
+          test -f /tmp/convalt-r4/src/package-lock.json
+          test -f /tmp/convalt-r4/src/scripts/generate-r4-assets.py
+
+      - name: npm ci
+        working-directory: /tmp/convalt-r4/src
         run: npm ci
+
       - name: Install asset-generator dependencies
-        working-directory: /tmp/convalt-r4
+        working-directory: /tmp/convalt-r4/src
         run: python3 -m pip install --disable-pip-version-check -r requirements-assets.txt
-      - name: Generate R4 cinematic assets
-        working-directory: /tmp/convalt-r4
-        run: python3 scripts/generate-r4-assets.py
-      - name: Typecheck
-        working-directory: /tmp/convalt-r4
+
+      - name: Generate all six R4 GLBs
+        working-directory: /tmp/convalt-r4/src
+        run: npm run assets:r4
+
+      - name: TypeScript validation
+        working-directory: /tmp/convalt-r4/src
         run: npm run typecheck
-      - name: R4 validation
-        working-directory: /tmp/convalt-r4
-        run: npm run validate:corporate:r4
-      - name: Production build
-        working-directory: /tmp/convalt-r4
+
+      - name: Generated R4 asset validation
+        working-directory: /tmp/convalt-r4/src
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const manifestPath = path.join('public','models','r4','manifest.json');
+          if (!fs.existsSync(manifestPath)) throw new Error('R4 manifest missing');
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          const assets = Array.isArray(manifest.assets) ? manifest.assets : [];
+          if (assets.length !== 6) throw new Error(`Expected 6 R4 assets, got ${assets.length}`);
+          let total = 0;
+          for (const a of assets) {
+            const rel = a.path || a.url || `/models/r4/${a.file || a.filename || ''}`;
+            const name = rel.split('/').pop();
+            const file = path.join('public','models','r4',name);
+            if (!fs.existsSync(file)) throw new Error(`Missing GLB: ${file}`);
+            const size = fs.statSync(file).size;
+            if (size < 500 * 1024 || size > 8 * 1024 * 1024) throw new Error(`GLB outside R4 budget: ${name} ${size}`);
+            total += size;
+          }
+          console.log(`Generated R4 assets PASS: 6 GLBs, ${(total / 1024 / 1024).toFixed(2)} MiB total`);
+          NODE
+
+      - name: Next.js production build
+        working-directory: /tmp/convalt-r4/src
         env:
           VERCEL: "1"
         run: npm run build
+
+      - name: Package verified Vercel source
+        working-directory: /tmp/convalt-r4/src
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=node_modules --exclude=.next -czf /tmp/convalt-r4/convalt-r4-vercel-source.tar.gz .
+          sha256sum /tmp/convalt-r4/convalt-r4-vercel-source.tar.gz | tee /tmp/convalt-r4/convalt-r4-vercel-source.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: convalt-r4-vercel-source
+          path: |
+            /tmp/convalt-r4/convalt-r4-vercel-source.tar.gz
+            /tmp/convalt-r4/convalt-r4-vercel-source.sha256
+          if-no-files-found: error
+          retention-days: 7
