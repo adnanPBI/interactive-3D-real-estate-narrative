@@ -1,0 +1,159 @@
+{
+  "stage": "6-r4-visual-fidelity",
+  "provenance": "Original Convalt visual-development environments authored procedurally from the R4 art-direction boards. Not client-supplied CAD and not approved factual site geometry.",
+  "generatedWith": {
+    "python": "3.x",
+    "trimesh": "4.11.1",
+    "generator": "scripts/generate-r4-assets.py"
+  },
+  "runtimeIntent": "near-realistic cinematic architectural visualization with consolidated material groups and mid-range GPU budgets",
+  "textureSourceFormat": "512px PNG embedded in GLB; approved production art may be promoted to KTX2/Basis via existing pipeline",
+  "budgets": {
+    "maxTrianglesPerScene": 180000,
+    "maxMeshGroups": 24,
+    "maxGlbBytesPerScene": 8388608
+  },
+  "assets": [
+    {
+      "file": "hero-campus.glb",
+      "bytes": 2063228,
+      "triangles": 10358,
+      "vertices": 6130,
+      "meshGroups": 14,
+      "materials": [
+        "Asphalt",
+        "BlackGlass",
+        "Bronze",
+        "Concrete",
+        "CoolGlow",
+        "Facade",
+        "Graphite",
+        "Ground",
+        "RoadMark",
+        "SolarGlass",
+        "Steel",
+        "Vegetation",
+        "Water",
+        "White"
+      ],
+      "sha256": "098c38fd26f2bdb400bc253ef990b4aadb7ef9482c5954fa72443288e5b9ad9f"
+    },
+    {
+      "file": "manufacturing.glb",
+      "bytes": 1994124,
+      "triangles": 7622,
+      "vertices": 4356,
+      "meshGroups": 13,
+      "materials": [
+        "Asphalt",
+        "BlackGlass",
+        "Bronze",
+        "Concrete",
+        "Facade",
+        "Graphite",
+        "Ground",
+        "RoadMark",
+        "SolarGlass",
+        "Steel",
+        "Vegetation",
+        "WarmGlow",
+        "White"
+      ],
+      "sha256": "7a60454360c0bc15b6e46e903bbe29e9e2ec0d7a84d1ebbd56b9468f411228c3"
+    },
+    {
+      "file": "power-generation.glb",
+      "bytes": 2086068,
+      "triangles": 11142,
+      "vertices": 6820,
+      "meshGroups": 14,
+      "materials": [
+        "Asphalt",
+        "BlackGlass",
+        "Bronze",
+        "Concrete",
+        "CoolGlow",
+        "Facade",
+        "Graphite",
+        "Ground",
+        "RoadMark",
+        "SolarGlass",
+        "Steel",
+        "Vegetation",
+        "Water",
+        "White"
+      ],
+      "sha256": "6d32ef69e1ac39a14f3a3facf78fcf305b3b46a12fccb75249215c72433c5089"
+    },
+    {
+      "file": "data-centers.glb",
+      "bytes": 2030108,
+      "triangles": 9070,
+      "vertices": 5152,
+      "meshGroups": 13,
+      "materials": [
+        "Asphalt",
+        "BlackGlass",
+        "Bronze",
+        "Concrete",
+        "Facade",
+        "Graphite",
+        "Ground",
+        "RoadMark",
+        "ServerFace",
+        "Steel",
+        "Vegetation",
+        "Water",
+        "White"
+      ],
+      "sha256": "1e73f79b854f077e07e22bef403284848a6e7d8b3c46e89ee5ff84356053d038"
+    },
+    {
+      "file": "recycling.glb",
+      "bytes": 2148996,
+      "triangles": 13322,
+      "vertices": 7320,
+      "meshGroups": 12,
+      "materials": [
+        "Asphalt",
+        "BlackGlass",
+        "Bronze",
+        "Concrete",
+        "Facade",
+        "Graphite",
+        "Ground",
+        "Recycled",
+        "RoadMark",
+        "Steel",
+        "Vegetation",
+        "White"
+      ],
+      "sha256": "e48e058b66d287e408732793801d62ef1de5a97bf09fdb882df8d9d62c6bcf7e"
+    },
+    {
+      "file": "closing-platform.glb",
+      "bytes": 2080944,
+      "triangles": 11050,
+      "vertices": 6544,
+      "meshGroups": 15,
+      "materials": [
+        "Asphalt",
+        "BlackGlass",
+        "Bronze",
+        "Concrete",
+        "CoolGlow",
+        "Facade",
+        "Graphite",
+        "Ground",
+        "RoadMark",
+        "SolarGlass",
+        "Steel",
+        "Vegetation",
+        "WarmGlow",
+        "Water",
+        "White"
+      ],
+      "sha256": "6e4791023cfd5ff6b40f1087d2c30e192d50defc97db7e4ca4fc71166f85550a"
+    }
+  ]
+}

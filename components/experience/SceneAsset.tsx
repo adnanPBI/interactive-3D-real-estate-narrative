@@ -1,0 +1,178 @@
+"use client";
+
+import { useFrame } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
+import * as THREE from "three";
+import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { modelTransform, sceneWeight, type SceneDefinition } from "@/experience/config/scenes";
+import { storyMotion } from "@/experience/config/storyMotion";
+import { useExperienceStore } from "@/lib/experienceStore";
+import { useSceneAsset } from "./useSceneAsset";
+
+type MaterialBinding = {
+  material: THREE.MeshStandardMaterial;
+  opacity: number;
+  emissiveIntensity: number;
+  pulse: boolean;
+};
+
+function AssetFailureMarker() {
+  return (
+    <group>
+      <mesh position={[0, 0.8, 0]}>
+        <boxGeometry args={[3.6, 1.6, 2.2]} />
+        <meshStandardMaterial color="#373d37" wireframe />
+      </mesh>
+      <mesh position={[0, 1.8, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[1.25, 0.035, 8, 48]} />
+        <meshBasicMaterial color="#b97828" />
+      </mesh>
+    </group>
+  );
+}
+
+function tuneMaterial(material: THREE.MeshStandardMaterial) {
+  // Stage 3 art-direction guardrails. The GLB owns its PBR values; these are
+  // deliberately small runtime adjustments that keep authored assets coherent.
+  if (material.name === "SolarGlass") {
+    material.roughness = Math.min(material.roughness, 0.22);
+    material.metalness = Math.max(material.metalness, 0.45);
+  } else if (material.name === "BlackGlass") {
+    material.roughness = Math.min(material.roughness, 0.16);
+    material.metalness = Math.max(material.metalness, 0.5);
+  } else if (material.name === "Concrete" || material.name === "Asphalt") {
+    material.roughness = Math.max(material.roughness, 0.82);
+  } else if (material.name === "Facade") {
+    material.roughness = Math.min(material.roughness, 0.48);
+    material.metalness = Math.max(material.metalness, 0.34);
+  } else if (material.name === "Bronze" || material.name === "Copper") {
+    material.emissive.set("#21160a");
+    material.emissiveIntensity = Math.max(material.emissiveIntensity, 0.08);
+  } else if (material.name === "ServerFace") {
+    material.emissive.set("#21170d");
+    material.emissiveIntensity = Math.max(material.emissiveIntensity, 0.28);
+  } else if (material.name === "WarmGlow") {
+    material.emissive.set("#5a3513");
+    material.emissiveIntensity = Math.max(material.emissiveIntensity, 0.6);
+  } else if (material.name === "CoolGlow") {
+    material.emissive.set("#203c5a");
+    material.emissiveIntensity = Math.max(material.emissiveIntensity, 0.48);
+  } else if (material.name === "Water") {
+    material.roughness = Math.min(material.roughness, 0.18);
+    material.metalness = Math.max(material.metalness, 0.4);
+  } else if (material.name === "Vegetation" || material.name === "Recycled") {
+    material.roughness = Math.max(material.roughness, 0.75);
+  } else if (material.name === "GreenGlow") {
+    material.emissive.set("#173d25");
+    material.emissiveIntensity = Math.max(material.emissiveIntensity, 0.38);
+  }
+
+  material.envMapIntensity = 0.9;
+  material.needsUpdate = true;
+}
+
+export function SceneAsset({ definition, sceneIndex, onReady }: { definition: SceneDefinition; sceneIndex: number; onReady?: () => void }) {
+  const root = useRef<THREE.Group>(null);
+  const smoothed = useRef(sceneWeight(sceneIndex, useExperienceStore.getState().progress));
+  const { gltf, failed } = useSceneAsset(definition.asset);
+
+  const { instance, bindings } = useMemo(() => {
+    if (!gltf) return { instance: null, bindings: [] as MaterialBinding[] };
+
+    const cloned = skeletonClone(gltf.scene);
+    const materialBindings: MaterialBinding[] = [];
+    const materialMap = new Map<THREE.Material, THREE.Material>();
+
+    cloned.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.frustumCulled = true;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+
+      const sourceMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const clonedMaterials = sourceMaterials.map((source) => {
+        let material = materialMap.get(source) as THREE.MeshStandardMaterial | undefined;
+        if (!material) {
+          material = source.clone() as THREE.MeshStandardMaterial;
+          materialMap.set(source, material);
+          if (material.isMeshStandardMaterial) {
+            tuneMaterial(material);
+            // Keep the transition shader path stable; only opacity changes per frame.
+            material.transparent = true;
+            // Stable chapters render with normal depth writes for crisp architectural
+            // occlusion. During cross-fades we temporarily disable depth writing so
+            // the incoming environment can blend without hard clipping.
+            material.depthWrite = true;
+            materialBindings.push({
+              material,
+              opacity: material.opacity,
+              emissiveIntensity: material.emissiveIntensity,
+              pulse: material.name === "ServerFace",
+            });
+          }
+        }
+        return material;
+      });
+      mesh.material = Array.isArray(mesh.material) ? clonedMaterials : clonedMaterials[0];
+    });
+
+    return { instance: cloned, bindings: materialBindings };
+  }, [gltf]);
+
+  useEffect(() => {
+    if (instance) onReady?.();
+  }, [instance, onReady]);
+
+  useEffect(() => {
+    return () => {
+      // Geometry/textures remain owned by AssetManager. Only per-instance material
+      // clones are disposed here, preventing scroll transitions from mutating or
+      // freeing the shared GLB cache.
+      for (const { material } of bindings) material.dispose();
+    };
+  }, [bindings]);
+
+  useFrame((state, delta) => {
+    if (!root.current) return;
+    const weight = sceneWeight(sceneIndex, useExperienceStore.getState().progress);
+    smoothed.current = THREE.MathUtils.damp(smoothed.current, weight, storyMotion.sceneBlendDamping, delta);
+    const w = THREE.MathUtils.clamp(smoothed.current, 0, 1);
+    root.current.visible = w > 0.012;
+
+    const transform = modelTransform(definition, state.size.width);
+    root.current.position.set(
+      transform.position[0],
+      transform.position[1] - (1 - w) * 0.42,
+      transform.position[2],
+    );
+    root.current.rotation.set(
+      transform.rotation[0],
+      transform.rotation[1] + (1 - w) * 0.055,
+      transform.rotation[2],
+    );
+    const scale = transform.scale * (0.968 + w * 0.032);
+    root.current.scale.setScalar(scale);
+
+    const fade = THREE.MathUtils.smoothstep(w, 0.04, 0.94);
+    const pulse = 0.9 + Math.sin(state.clock.elapsedTime * 1.65) * 0.1;
+    for (const binding of bindings) {
+      const material = binding.material;
+      material.opacity = binding.opacity * fade;
+      const shouldWriteDepth = fade > 0.965;
+      if (material.depthWrite !== shouldWriteDepth) {
+        material.depthWrite = shouldWriteDepth;
+        material.needsUpdate = true;
+      }
+      material.emissiveIntensity = binding.emissiveIntensity * (binding.pulse ? pulse : 1) * (0.45 + 0.55 * fade);
+    }
+  });
+
+  return (
+    <group ref={root}>
+      {instance ? <primitive object={instance} /> : failed ? <AssetFailureMarker /> : null}
+    </group>
+  );
+}
