@@ -1,0 +1,113 @@
+name: R4 Final Verified Build and Publish
+
+on:
+  push:
+    branches: ["release/r4-deploy-src"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Reconstruct exact R4 deployment source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/convalt-r4
+          mkdir -p /tmp/convalt-r4/src
+          cat \
+            .r4src/chunk-00.bin \
+            .r4src/chunk-01.bin \
+            .r4src/chunk-02.bin \
+            .r4src/chunk-03.bin \
+            .r4src/chunk-04.bin \
+            .r4src/chunk-05-06.bin \
+            .r4src/chunk-07-08.bin \
+            .r4src/chunk-09-10.bin \
+            .r4src/chunk-11.bin \
+            .r4src/chunk-12.bin \
+            .r4src/chunk-13.bin > /tmp/convalt-r4/source.tar.xz
+          echo "0b2d748e4408ea717df80e1e25ef0310bea0ee92b89a52cdf0fa9e6a388b3f6f  /tmp/convalt-r4/source.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/convalt-r4/source.tar.xz -C /tmp/convalt-r4/src
+          test -f /tmp/convalt-r4/src/package-lock.json
+          test -f /tmp/convalt-r4/src/scripts/generate-r4-assets.py
+
+      - name: npm ci
+        working-directory: /tmp/convalt-r4/src
+        run: npm ci
+
+      - name: Install asset generator dependency
+        working-directory: /tmp/convalt-r4/src
+        run: python3 -m pip install --disable-pip-version-check -r requirements-assets.txt
+
+      - name: Generate all six R4 GLBs
+        working-directory: /tmp/convalt-r4/src
+        run: python3 scripts/generate-r4-assets.py
+
+      - name: TypeScript validation
+        working-directory: /tmp/convalt-r4/src
+        run: npm run typecheck
+
+      - name: R4 visual asset validation
+        working-directory: /tmp/convalt-r4/src
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const names = ['hero-campus','manufacturing','power-generation','data-centers','recycling','closing-platform'];
+          const manifestPath = 'public/models/r4/manifest.json';
+          if (!fs.existsSync(manifestPath)) throw new Error('Missing R4 manifest');
+          const m = JSON.parse(fs.readFileSync(manifestPath,'utf8'));
+          if (m.stage !== '6-r4-visual-fidelity') throw new Error(`Unexpected stage ${m.stage}`);
+          if (!Array.isArray(m.assets) || m.assets.length !== 6) throw new Error('Expected six R4 assets');
+          let tris = 0, bytes = 0;
+          for (const name of names) {
+            const item = m.assets.find(x => x.file === `${name}.glb`);
+            if (!item) throw new Error(`Manifest missing ${name}.glb`);
+            const p = path.join('public/models/r4', item.file);
+            if (!fs.existsSync(p)) throw new Error(`Missing ${p}`);
+            const actual = fs.statSync(p).size;
+            if (actual !== item.bytes) throw new Error(`${name} byte mismatch ${actual} != ${item.bytes}`);
+            if (item.bytes < 500000 || item.bytes > 8*1024*1024) throw new Error(`${name} byte budget failed`);
+            if (item.triangles < 5000 || item.triangles > 180000) throw new Error(`${name} triangle budget failed`);
+            if (item.meshGroups < 8 || item.meshGroups > 24) throw new Error(`${name} mesh-group budget failed`);
+            if (!Array.isArray(item.materials) || item.materials.length < 8) throw new Error(`${name} material budget failed`);
+            tris += item.triangles; bytes += item.bytes;
+          }
+          console.log(`R4 visual asset validation PASS: 6 GLBs, ${tris.toLocaleString()} triangles, ${(bytes/1024/1024).toFixed(2)} MiB`);
+          NODE
+
+      - name: Next.js Vercel-mode production build
+        working-directory: /tmp/convalt-r4/src
+        env:
+          VERCEL: "1"
+          NEXT_PUBLIC_ASSET_SET: "r4"
+        run: npm run build
+
+      - name: Publish clean verified source branch
+        working-directory: /tmp/convalt-r4/src
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          rm -rf node_modules .next
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "deploy: verified R4 cinematic source"
+          git branch -M deploy/r4-vercel
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin deploy/r4-vercel
