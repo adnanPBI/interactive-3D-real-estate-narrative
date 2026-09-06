@@ -26,13 +26,17 @@ const launchers = [
     name: 'firefox',
     type: firefox,
     options: {
-      headless: true,
+      headless: false,
       firefoxUserPrefs: {
         'webgl.disabled': false,
         'webgl.force-enabled': true,
         'gfx.webrender.software': true,
       },
-      env: { ...process.env, LIBGL_ALWAYS_SOFTWARE: '1' },
+      env: {
+        ...process.env,
+        LIBGL_ALWAYS_SOFTWARE: '1',
+        MOZ_WEBRENDER: '1',
+      },
     },
   },
   {
