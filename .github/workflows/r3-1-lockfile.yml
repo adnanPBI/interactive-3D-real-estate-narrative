@@ -1,0 +1,30 @@
+name: R3.1 Lockfile Generation
+
+on:
+  push:
+    branches:
+      - automation/r3-1-lockfile
+  workflow_dispatch:
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package.json
+      - name: Generate npm lockfile only
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify lockfile
+        run: |
+          test -s package-lock.json
+          node -e "const p=require('./package-lock.json'); if (p.lockfileVersion < 3) process.exit(1); console.log('lockfileVersion', p.lockfileVersion)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: r3-1-package-lock
+          path: package-lock.json
+          if-no-files-found: error
