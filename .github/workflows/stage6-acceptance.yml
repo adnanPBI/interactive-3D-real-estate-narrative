@@ -57,5 +57,6 @@ jobs:
           name: stage6-browser-acceptance
           path: |
             artifacts/acceptance/browser-results.json
+            artifacts/acceptance/*.png
             /tmp/convalt-next.log
           if-no-files-found: warn
