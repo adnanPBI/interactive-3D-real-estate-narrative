@@ -1,5 +1,5 @@
-import { MultiSceneExperience } from '@/components/MultiSceneExperience';
+import { Stage6Experience } from '@/components/Stage6Experience';
 
 export default function HomePage() {
-  return <MultiSceneExperience />;
+  return <Stage6Experience />;
 }
