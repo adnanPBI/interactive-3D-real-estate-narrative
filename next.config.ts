@@ -1,11 +1,17 @@
 import type { NextConfig } from "next";
 
+const isVercel = process.env.VERCEL === "1";
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  output: "standalone",
+  // Next.js 16.3 + Vercel's build adapter currently fails when standalone
+  // output is enabled because the adapter expects next-server.js.nft.json.
+  // Keep standalone for non-Vercel packaging, but let Vercel use its native
+  // Next.js output pipeline.
+  output: isVercel ? undefined : "standalone",
   experimental: {
-    optimizePackageImports: ["three", "@react-three/fiber", "gsap"],
+    optimizePackageImports: ["three"],
   },
   async headers() {
     return [
