@@ -1,0 +1,83 @@
+name: R4 Publish Deploy Branch
+
+on:
+  push:
+    branches: ["release/r4-cinematic"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Reconstruct exact verified R4 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/convalt-r4
+          mkdir -p /tmp/convalt-r4/src
+          : > /tmp/convalt-r4/source.tar.xz
+          for f in .r4first/chunk-*.b64; do base64 -d "$f" >> /tmp/convalt-r4/source.tar.xz; done
+          for f in .r4bin/chunk-02.b64 .r4bin/chunk-03.b64 .r4bin/chunk-04.b64 .r4bin/chunk-05.b64 .r4bin/chunk-06.b64 .r4bin/chunk-07.b64 .r4bin/chunk-08.b64 .r4bin/chunk-09.b64; do base64 -d "$f" >> /tmp/convalt-r4/source.tar.xz; done
+          test "$(find .r4first -maxdepth 1 -name 'chunk-*.b64' | wc -l)" -eq 8
+          echo "c76cde68cd39d1557a30e9d1d6c59463b00e73e0c6bab1ab8568ab1b42dd3a02  /tmp/convalt-r4/source.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/convalt-r4/source.tar.xz -C /tmp/convalt-r4/src
+
+      - name: Rebuild exact R4 release candidate
+        working-directory: /tmp/convalt-r4/src
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          python3 -m pip install --disable-pip-version-check -r requirements-assets.txt
+          npm run assets:r4
+          npm run typecheck
+          VERCEL=1 npm run build
+
+      - name: Verify six generated cinematic GLBs
+        working-directory: /tmp/convalt-r4/src
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const m = JSON.parse(fs.readFileSync(path.join('public','models','r4','manifest.json'),'utf8'));
+          const a = Array.isArray(m.assets) ? m.assets : [];
+          if (a.length !== 6) throw new Error(`Expected six assets, got ${a.length}`);
+          let bytes=0;
+          for (const x of a) {
+            const rel=x.path||x.url||`/models/r4/${x.file||x.filename||''}`;
+            const p=path.join('public','models','r4',rel.split('/').pop());
+            if(!fs.existsSync(p)) throw new Error(`Missing ${p}`);
+            bytes += fs.statSync(p).size;
+          }
+          console.log(`R4_DEPLOY_ASSETS_PASS assets=6 sizeMiB=${(bytes/1024/1024).toFixed(2)}`);
+          NODE
+
+      - name: Publish clean deployment branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEPLOY_SRC=/tmp/convalt-r4/src
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan deploy/r4-vercel
+          git rm -rf . >/dev/null 2>&1 || true
+          git clean -fdx >/dev/null 2>&1 || true
+          rsync -a --exclude=node_modules --exclude=.next --exclude=tsconfig.tsbuildinfo "$DEPLOY_SRC/" ./
+          git add -A
+          git commit -m "deploy: Convalt R4 cinematic visual fidelity"
+          git push --force origin HEAD:refs/heads/deploy/r4-vercel
+          echo "R4_DEPLOY_BRANCH_PASS $(git rev-parse HEAD)"
