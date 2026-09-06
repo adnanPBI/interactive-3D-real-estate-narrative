@@ -1,12 +1,13 @@
 {
   "name": "convalt-energy-3d-stage6-multiscene",
-  "version": "0.6.1-stage6-multiscene",
+  "version": "0.6.2-stage6-multiscene",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "qa:browser": "node tests/browser-acceptance.mjs"
   },
   "dependencies": {
     "next": "16.3.4",
@@ -15,6 +16,7 @@
     "three": "0.185.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.55.0",
     "@types/node": "22.18.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
