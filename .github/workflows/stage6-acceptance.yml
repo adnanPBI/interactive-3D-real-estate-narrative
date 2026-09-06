@@ -12,7 +12,6 @@ jobs:
     timeout-minutes: 30
     env:
       VERCEL: "1"
-      NODE_ENV: production
     steps:
       - name: Checkout release branch
         uses: actions/checkout@v4
