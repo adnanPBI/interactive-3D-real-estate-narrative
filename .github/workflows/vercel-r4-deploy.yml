@@ -25,7 +25,7 @@ jobs:
         env:
           R4_RUNTIME_ONLY: "1"
         run: npm run validate:corporate:r4
-      - name: Deploy production to Vercel
+      - name: Verify Vercel REST authentication
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
@@ -34,14 +34,20 @@ jobs:
             echo "::error::GitHub repository secret VERCEL_TOKEN is not configured."
             exit 2
           fi
-          case "$VERCEL_TOKEN" in
-            vcp_*) ;;
-            *)
-              echo "::error::VERCEL_TOKEN must be a Vercel personal access token (vcp_...)."
-              exit 2
-              ;;
-          esac
-          echo "Vercel personal access token detected (value masked)."
+          STATUS=$(curl -sS -o vercel-auth.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            https://api.vercel.com/v2/user)
+          echo "Vercel /v2/user HTTP status: ${STATUS}"
+          if [ "$STATUS" != "200" ]; then
+            node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync("vercel-auth.json","utf8")); const e=x.error||{}; console.error(`Vercel auth error: ${e.code||"unknown"}: ${e.message||"request rejected"}`);'
+            exit 3
+          fi
+          node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync("vercel-auth.json","utf8")); console.log(`Vercel REST authentication PASS for ${x.user?.username||x.user?.name||"authenticated user"}.`);'
+      - name: Deploy production to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
           npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN" 2>&1 | tee vercel-deploy.log
       - name: Upload deployment log
         if: always()
