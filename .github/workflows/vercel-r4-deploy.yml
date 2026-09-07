@@ -34,8 +34,8 @@ jobs:
           set -euo pipefail
           if compgen -G "scripts/r5-source.patch.gz.b64.part-*" > /dev/null; then
             cat scripts/r5-source.patch.gz.b64.part-* | base64 --decode | gzip --decompress > /tmp/r5-source.patch
-            git apply --check /tmp/r5-source.patch
-            git apply /tmp/r5-source.patch
+            git apply --check --exclude=README.md /tmp/r5-source.patch
+            git apply --exclude=README.md /tmp/r5-source.patch
             rm scripts/r5-source.patch.gz.b64.part-*
           else
             echo "R5 source upgrade is already materialized on main."
@@ -69,7 +69,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
-            README.md package.json package-lock.json \
+            package.json package-lock.json \
             components/experience/AssetPreloader.tsx \
             components/experience/CinematicCameraRig.tsx \
             components/experience/ExperienceCanvas.tsx \
