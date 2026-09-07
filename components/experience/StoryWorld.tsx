@@ -12,7 +12,7 @@ import { SceneAsset } from "./SceneAsset";
 /**
  * Cinematic-minimal scene composition.
  *
- * R4 preserves the previous procedural micro-detail layer. Realism is
+ * R5 preserves the previous procedural micro-detail layer while selecting a richer hero tier per device. Realism is
  * authored in optimized GLBs, not rebuilt at runtime from hundreds of decorative
  * primitives. Only the current and next scene are mounted around the transition.
  */
@@ -25,7 +25,7 @@ export function StoryWorld({ quality, onFirstSceneReady }: { quality: "high" | "
       <EnvironmentProbe />
       <CinematicSky />
       <CinematicCameraRig quality={quality} />
-      <AssetPreloader />
+      <AssetPreloader quality={quality} />
 
       <mesh position={[0, -1.55, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={quality === "high"}>
         <planeGeometry args={[200, 200]} />

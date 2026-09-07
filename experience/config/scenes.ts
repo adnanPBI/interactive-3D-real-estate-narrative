@@ -35,9 +35,15 @@ export type SceneDefinition = {
 };
 
 const requestedAssetSet = process.env.NEXT_PUBLIC_3D_ASSET_SET;
-const assetSet = requestedAssetSet === "approved" ? "approved" : requestedAssetSet === "stage3" ? "stage3" : "r4";
-const assetBase = `/models/${assetSet}`;
-const fallbackBase = assetSet === "r4" ? "/fallback/r4" : "/fallback/stage3";
+const assetSet = requestedAssetSet === "approved"
+  ? "approved"
+  : requestedAssetSet === "stage3"
+    ? "stage3"
+    : requestedAssetSet === "r4"
+      ? "r4"
+      : "r5";
+const assetBase = assetSet === "r5" ? "/models/r5/high" : `/models/${assetSet}`;
+const fallbackBase = assetSet === "r5" ? "/fallback/r5" : assetSet === "r4" ? "/fallback/r4" : "/fallback/stage3";
 
 const asset = (name: string) => `${assetBase}/${name}.glb`;
 const fallback = (name: string) => `${fallbackBase}/${name}.svg`;
@@ -61,7 +67,7 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
       mobile: { position: [3.2, 5.0, 17.2], target: [0.0, 0.9, 0.4], fov: 51 },
     },
     model: {
-      desktop: { position: [0.8, -1.34, 0], rotation: [0, -0.18, 0], scale: 0.64 },
+      desktop: { position: [1.85, -1.34, 0], rotation: [0, -0.18, 0], scale: 0.60 },
       tablet: { position: [0.35, -1.34, 0.1], rotation: [0, -0.14, 0], scale: 0.60 },
       mobile: { position: [0, -1.34, 0.65], rotation: [0, -0.08, 0], scale: 0.54 },
     },
@@ -85,7 +91,7 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
       mobile: { position: [2.6, 4.1, 14.6], target: [0.2, 1.05, 0.55], fov: 52 },
     },
     model: {
-      desktop: { position: [0.9, -1.35, 0.0], rotation: [0, -0.10, 0], scale: 0.76 },
+      desktop: { position: [2.05, -1.35, 0.0], rotation: [0, -0.10, 0], scale: 0.68 },
       tablet: { position: [0.45, -1.35, 0.2], rotation: [0, -0.08, 0], scale: 0.64 },
       mobile: { position: [0, -1.35, 0.75], rotation: [0, -0.03, 0], scale: 0.56 },
     },
@@ -109,7 +115,7 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
       mobile: { position: [1.8, 4.6, 16.5], target: [0, 0.85, 0.5], fov: 51 },
     },
     model: {
-      desktop: { position: [-0.45, -1.35, 0.0], rotation: [0, 0.18, 0], scale: 0.64 },
+      desktop: { position: [-2.05, -1.35, 0.0], rotation: [0, 0.18, 0], scale: 0.61 },
       tablet: { position: [-0.2, -1.35, 0.15], rotation: [0, 0.13, 0], scale: 0.60 },
       mobile: { position: [0, -1.35, 0.72], rotation: [0, 0.06, 0], scale: 0.53 },
     },
@@ -133,7 +139,7 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
       mobile: { position: [0.9, 4.1, 15.2], target: [0.05, 1.0, 0.45], fov: 51 },
     },
     model: {
-      desktop: { position: [0.4, -1.34, 0.0], rotation: [0, -0.08, 0], scale: 0.72 },
+      desktop: { position: [2.10, -1.34, 0.0], rotation: [0, -0.08, 0], scale: 0.65 },
       tablet: { position: [0.2, -1.34, 0.2], rotation: [0, -0.05, 0], scale: 0.61 },
       mobile: { position: [0, -1.34, 0.75], rotation: [0, -0.02, 0], scale: 0.54 },
     },
@@ -157,7 +163,7 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
       mobile: { position: [0.0, 3.95, 15.0], target: [0, 0.95, 0.5], fov: 51 },
     },
     model: {
-      desktop: { position: [-0.4, -1.35, 0], rotation: [0, 0.13, 0], scale: 0.72 },
+      desktop: { position: [-2.00, -1.35, 0], rotation: [0, 0.13, 0], scale: 0.65 },
       tablet: { position: [-0.2, -1.35, 0.2], rotation: [0, 0.09, 0], scale: 0.61 },
       mobile: { position: [0, -1.35, 0.78], rotation: [0, 0.04, 0], scale: 0.54 },
     },
@@ -181,7 +187,7 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
       mobile: { position: [-0.4, 5.1, 18.6], target: [0.0, 0.9, 0.4], fov: 50 },
     },
     model: {
-      desktop: { position: [0.2, -1.35, 0], rotation: [0, -0.05, 0], scale: 0.61 },
+      desktop: { position: [1.60, -1.35, 0], rotation: [0, -0.05, 0], scale: 0.58 },
       tablet: { position: [0.1, -1.35, 0.2], rotation: [0, -0.03, 0], scale: 0.57 },
       mobile: { position: [0, -1.35, 0.8], rotation: [0, -0.01, 0], scale: 0.51 },
     },
@@ -233,6 +239,11 @@ export function cameraShot(definition: SceneDefinition, width: number): CameraSh
 
 export function modelTransform(definition: SceneDefinition, width: number): ModelTransform {
   return definition.model[viewportClass(width)];
+}
+
+export function sceneAssetForQuality(definition: SceneDefinition, quality: "high" | "medium") {
+  if (assetSet === "r5") return `/models/r5/${quality}/${definition.assetName}.glb`;
+  return definition.asset;
 }
 
 export const activeAssetSet = assetSet;

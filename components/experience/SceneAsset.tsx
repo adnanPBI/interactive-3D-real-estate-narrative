@@ -1,12 +1,13 @@
 "use client";
 
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
-import { modelTransform, sceneWeight, type SceneDefinition } from "@/experience/config/scenes";
+import { activeAssetSet, modelTransform, sceneAssetForQuality, sceneWeight, type SceneDefinition } from "@/experience/config/scenes";
 import { storyMotion } from "@/experience/config/storyMotion";
 import { useExperienceStore } from "@/lib/experienceStore";
+import { InstancedSolarField } from "./InstancedSolarField";
 import { useSceneAsset } from "./useSceneAsset";
 
 type MaterialBinding = {
@@ -15,6 +16,7 @@ type MaterialBinding = {
   emissiveIntensity: number;
   pulse: boolean;
   stableDepthWrite: boolean;
+  stableTransparent: boolean;
 };
 
 function AssetFailureMarker() {
@@ -32,7 +34,7 @@ function AssetFailureMarker() {
   );
 }
 
-function tuneMaterial(material: THREE.MeshStandardMaterial) {
+function tuneMaterial(material: THREE.MeshStandardMaterial, anisotropy: number, quality: "high" | "medium") {
   // Stage 3 art-direction guardrails. The GLB owns its PBR values; these are
   // deliberately small runtime adjustments that keep authored assets coherent.
   if (material.name === "SolarGlass") {
@@ -91,14 +93,24 @@ function tuneMaterial(material: THREE.MeshStandardMaterial) {
     material.emissiveIntensity = Math.max(material.emissiveIntensity, 0.38);
   }
 
-  material.envMapIntensity = 0.9;
+  material.envMapIntensity = quality === "high" ? 1.16 : 0.96;
+  for (const texture of [material.map, material.normalMap, material.roughnessMap, material.metalnessMap, material.aoMap, material.emissiveMap]) {
+    if (!texture) continue;
+    texture.anisotropy = anisotropy;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.needsUpdate = true;
+  }
   material.needsUpdate = true;
 }
 
 export function SceneAsset({ definition, sceneIndex, quality, onReady }: { definition: SceneDefinition; sceneIndex: number; quality: "high" | "medium"; onReady?: () => void }) {
   const root = useRef<THREE.Group>(null);
+  const renderer = useThree((state) => state.gl);
   const smoothed = useRef(sceneWeight(sceneIndex, useExperienceStore.getState().progress));
-  const { gltf, failed } = useSceneAsset(definition.asset);
+  const assetUrl = sceneAssetForQuality(definition, quality);
+  const anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), quality === "high" ? 12 : 8);
+  const { gltf, failed } = useSceneAsset(assetUrl);
 
   const { instance, bindings } = useMemo(() => {
     if (!gltf) return { instance: null, bindings: [] as MaterialBinding[] };
@@ -123,8 +135,11 @@ export function SceneAsset({ definition, sceneIndex, quality, onReady }: { defin
           material = source.clone() as THREE.MeshStandardMaterial;
           materialMap.set(source, material);
           if (material.isMeshStandardMaterial) {
-            tuneMaterial(material);
-            // Keep the transition shader path stable; only opacity changes per frame.
+            tuneMaterial(material, anisotropy, quality);
+            const stableTransparent = material.transparent || material.name === "VisionGlass" || material.name === "Shadow";
+            // During chapter blends solids temporarily use the transparent path.
+            // Once a chapter is stable they return to the opaque pass for cleaner
+            // MSAA silhouettes, deterministic depth ordering and fewer blend costs.
             material.transparent = true;
             // Stable chapters render with normal depth writes for crisp architectural
             // occlusion. During cross-fades we temporarily disable depth writing so
@@ -138,6 +153,7 @@ export function SceneAsset({ definition, sceneIndex, quality, onReady }: { defin
               emissiveIntensity: material.emissiveIntensity,
               pulse: material.name === "ServerFace",
               stableDepthWrite,
+              stableTransparent,
             });
           }
         }
@@ -146,12 +162,13 @@ export function SceneAsset({ definition, sceneIndex, quality, onReady }: { defin
       mesh.material = Array.isArray(mesh.material) ? clonedMaterials : clonedMaterials[0];
       const names = clonedMaterials.map((material) => material.name);
       const translucentOnly = names.every((name) => name === "VisionGlass" || name === "Shadow" || name === "WarmGlow" || name === "CoolGlow");
-      mesh.castShadow = quality === "high" && !translucentOnly;
-      mesh.receiveShadow = quality === "high" && names.every((name) => name !== "VisionGlass" && name !== "Shadow");
+      const mediumCaster = names.some((name) => ["Facade", "Graphite", "Steel", "Aluminum", "Roof", "Concrete", "White"].includes(name));
+      mesh.castShadow = !translucentOnly && (quality === "high" || mediumCaster);
+      mesh.receiveShadow = names.every((name) => name !== "VisionGlass" && name !== "Shadow");
     });
 
     return { instance: cloned, bindings: materialBindings };
-  }, [gltf, quality]);
+  }, [anisotropy, gltf, quality]);
 
   useEffect(() => {
     if (instance) onReady?.();
@@ -193,8 +210,10 @@ export function SceneAsset({ definition, sceneIndex, quality, onReady }: { defin
       const material = binding.material;
       material.opacity = binding.opacity * fade;
       const shouldWriteDepth = binding.stableDepthWrite && fade > 0.965;
-      if (material.depthWrite !== shouldWriteDepth) {
+      const shouldBeTransparent = binding.stableTransparent || fade < 0.995;
+      if (material.depthWrite !== shouldWriteDepth || material.transparent !== shouldBeTransparent) {
         material.depthWrite = shouldWriteDepth;
+        material.transparent = shouldBeTransparent;
         material.needsUpdate = true;
       }
       material.emissiveIntensity = binding.emissiveIntensity * (binding.pulse ? pulse : 1) * (0.45 + 0.55 * fade);
@@ -204,6 +223,28 @@ export function SceneAsset({ definition, sceneIndex, quality, onReady }: { defin
   return (
     <group ref={root}>
       {instance ? <primitive object={instance} /> : failed ? <AssetFailureMarker /> : null}
+      {activeAssetSet === "r5" && definition.id === "generation" ? (
+        <InstancedSolarField
+          sceneIndex={sceneIndex}
+          quality={quality}
+          cols={quality === "high" ? 14 : 10}
+          rows={quality === "high" ? 4 : 3}
+          origin={[-0.9, 0.54, -4.75]}
+          spacing={[1.55, 0.92]}
+          panelScale={quality === "high" ? 0.52 : 0.48}
+        />
+      ) : null}
+      {activeAssetSet === "r5" && definition.id === "hero" && quality === "high" ? (
+        <InstancedSolarField
+          sceneIndex={sceneIndex}
+          quality={quality}
+          cols={10}
+          rows={2}
+          origin={[-3.9, 0.53, 5.72]}
+          spacing={[1.48, 0.88]}
+          panelScale={0.46}
+        />
+      ) : null}
     </group>
   );
 }

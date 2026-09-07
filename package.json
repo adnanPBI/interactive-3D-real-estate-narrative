@@ -1,6 +1,6 @@
 {
   "name": "convalt-energy-3d-web",
-  "version": "0.6.2-stage6-r4",
+  "version": "0.7.0-stage6-r5",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -42,13 +42,15 @@
     "benchmark:prep": "npm run typecheck && npm run build",
     "validate:corporate": "node scripts/validate-corporate.mjs",
     "validate:package": "node scripts/validate-package-completeness.mjs",
-    "validate:corporate:full": "npm run validate:package && npm run validate:imports && npm run validate:corporate && npm run validate:corporate:r3 && npm run validate:corporate:r3.1 && npm run validate:corporate:r4 && npm test",
+    "validate:corporate:full": "npm run validate:package && npm run validate:imports && npm run validate:corporate && npm run validate:corporate:r3 && npm run validate:corporate:r3.1 && npm run validate:corporate:r4 && npm run validate:corporate:r5 && npm test",
     "validate:imports": "node scripts/validate-local-imports.mjs",
     "validate:corporate:r3": "node scripts/validate-corporate-r3.mjs",
     "test": "node --test tests/*.test.mjs",
     "validate:corporate:r3.1": "node scripts/validate-corporate-r3-1.mjs",
     "assets:r4": "python3 scripts/generate-r4-assets.py",
-    "validate:corporate:r4": "node scripts/validate-corporate-r4.mjs"
+    "validate:corporate:r4": "node scripts/validate-corporate-r4.mjs",
+    "assets:r5": "python3 scripts/generate-r5-hybrid-assets.py",
+    "validate:corporate:r5": "node scripts/validate-corporate-r5.mjs"
   },
   "dependencies": {
     "@react-three/fiber": "9.7.0",
@@ -74,5 +76,5 @@
     "npm": ">=10 <11"
   },
   "stage6CorporateEnhancement": "2026.09",
-  "stage6CorporateRevision": "r4.1-cinematic-model-polish"
+  "stage6CorporateRevision": "r5-hybrid-cinematic-fidelity"
 }

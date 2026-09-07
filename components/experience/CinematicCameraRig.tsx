@@ -62,15 +62,18 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
   useEffect(() => {
     const light = sun.current;
     if (!light) return;
-    light.castShadow = quality === "high";
-    light.shadow.mapSize.set(1024, 1024);
-    light.shadow.bias = -0.00025;
-    light.shadow.normalBias = 0.025;
+    light.castShadow = true;
+    const shadowSize = quality === "high" ? 2048 : 1024;
+    light.shadow.mapSize.set(shadowSize, shadowSize);
+    light.shadow.bias = -0.00018;
+    light.shadow.normalBias = quality === "high" ? 0.018 : 0.026;
+    light.shadow.radius = quality === "high" ? 1.35 : 1.0;
     const camera = light.shadow.camera as THREE.OrthographicCamera;
-    camera.left = -17;
-    camera.right = 17;
-    camera.top = 17;
-    camera.bottom = -17;
+    const extent = quality === "high" ? 16 : 14;
+    camera.left = -extent;
+    camera.right = extent;
+    camera.top = extent;
+    camera.bottom = -extent;
     camera.near = 0.5;
     camera.far = 42;
     camera.updateProjectionMatrix();
@@ -159,10 +162,10 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
 
   return (
     <>
-      <hemisphereLight args={["#fffaf1", "#90958d", quality === "high" ? 1.02 : 0.90]} />
-      <directionalLight ref={sun} position={[6, 10, 5]} intensity={2.2} castShadow={quality === "high"} />
+      <hemisphereLight args={["#fffaf1", "#7f877f", quality === "high" ? 0.82 : 0.74]} />
+      <directionalLight ref={sun} position={[6, 10, 5]} intensity={2.2} castShadow />
       <pointLight ref={rim} position={[-6, 4.5, -4]} intensity={5.8} distance={25} decay={2} />
-      <pointLight position={[3.5, 2.6, 5.5]} color="#ffd7a0" intensity={quality === "high" ? 1.25 : 0.75} distance={15} decay={2} />
+      <pointLight position={[3.5, 2.6, 5.5]} color="#ffd7a0" intensity={quality === "high" ? 1.12 : 0.62} distance={15} decay={2} />
     </>
   );
 }
