@@ -1,0 +1,34 @@
+name: Deploy R4 to Vercel
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/vercel-r4-deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: TypeScript gate
+        run: npm run typecheck
+      - name: R4 visual asset gate
+        run: npm run validate:corporate:r4
+      - name: Deploy production to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "::error::GitHub secret VERCEL_TOKEN is not configured for this repository."
+            exit 2
+          fi
+          npx vercel@latest --prod --yes --token "$VERCEL_TOKEN" --scope adnans-projects-1993fd6c
