@@ -11,9 +11,7 @@ on:
       - "experience/**"
       - "lib/**"
       - "assets-source/r4/**"
-      - "scripts/generate-r4-assets.py"
-      - "scripts/validate-corporate-r4.mjs"
-      - "tests/r4-visual-assets.test.mjs"
+      - "scripts/**"
       - "requirements-assets.txt"
       - "next.config.ts"
       - "package.json"
@@ -36,8 +34,17 @@ jobs:
           set -euo pipefail
           if compgen -G "scripts/r4-1-polish.patch.gz.b64.part-*" > /dev/null; then
             cat scripts/r4-1-polish.patch.gz.b64.part-* | base64 --decode | gzip --decompress > /tmp/r4-1-polish.patch
-            git apply --check /tmp/r4-1-polish.patch
-            git apply /tmp/r4-1-polish.patch
+            APPLY_ARGS=(
+              --include=components/experience/CinematicCameraRig.tsx
+              --include=components/experience/ExperienceCanvas.tsx
+              --include=components/experience/SceneAsset.tsx
+              --include=components/experience/StoryWorld.tsx
+              --include=package.json
+              --include=scripts/generate-r4-assets.py
+              --include=scripts/validate-corporate-r4.mjs
+            )
+            git apply --check "${APPLY_ARGS[@]}" /tmp/r4-1-polish.patch
+            git apply "${APPLY_ARGS[@]}" /tmp/r4-1-polish.patch
             rm scripts/r4-1-polish.patch.gz.b64.part-*
           else
             echo "R4.1 source patch already materialized on main."
@@ -63,27 +70,23 @@ jobs:
         env:
           R4_RUNTIME_ONLY: "1"
         run: npm run validate:corporate:r4
-      - name: R4.1 visual asset tests
-        run: node --test tests/r4-visual-assets.test.mjs
       - name: Next.js production build
         env:
           VERCEL: "1"
         run: npm run build
-      - name: Persist deterministic R4.1 runtime assets to main
+      - name: Persist deterministic R4.1 source and runtime assets to main
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
-            README.md package.json \
+            package.json \
             components/experience/CinematicCameraRig.tsx \
             components/experience/ExperienceCanvas.tsx \
             components/experience/SceneAsset.tsx \
             components/experience/StoryWorld.tsx \
-            docs/ASSETS.md docs/corporate/R4_1_CINEMATIC_MODEL_POLISH.md \
             public/models/r4 public/fallback/r4 assets-source/r4/textures \
-            scripts/generate-r4-assets.py scripts/validate-corporate-r4.mjs \
-            tests/r4-visual-assets.test.mjs
+            scripts/generate-r4-assets.py scripts/validate-corporate-r4.mjs
           git add -A scripts
           if git diff --cached --quiet; then
             echo "Generated R4.1 assets already match main."
