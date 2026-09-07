@@ -5,6 +5,7 @@ on:
     branches: ["main"]
     paths:
       - ".github/workflows/vercel-r4-deploy.yml"
+      - "scripts/validate-corporate-r4.mjs"
   workflow_dispatch:
 
 jobs:
@@ -20,7 +21,9 @@ jobs:
         run: npm ci
       - name: TypeScript gate
         run: npm run typecheck
-      - name: R4 visual asset gate
+      - name: R4 runtime visual asset gate
+        env:
+          R4_RUNTIME_ONLY: "1"
         run: npm run validate:corporate:r4
       - name: Deploy production to Vercel
         env:
