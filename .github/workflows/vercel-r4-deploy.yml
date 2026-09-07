@@ -43,6 +43,5 @@ jobs:
             exit 2
           fi
           echo "Using configured Vercel credential from $SOURCE_NAME (value masked)."
-          npx vercel@latest --prod --yes --token "$TOKEN" --scope adnans-projects-1993fd6c
-
-# Secret-refresh probe: this commit intentionally triggers a fresh run so newly-added repository secrets are picked up.
+          npx vercel@latest whoami --token "$TOKEN"
+          npx vercel@latest --prod --yes --token "$TOKEN"
