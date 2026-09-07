@@ -36,8 +36,9 @@ export function ExperienceCanvas({
           gl.setPixelRatio(Math.min(limits.initialDpr, limits.maxDpr));
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.16;
-          gl.shadowMap.enabled = false;
+          gl.toneMappingExposure = quality === "high" ? 1.12 : 1.16;
+          gl.shadowMap.enabled = quality === "high";
+          gl.shadowMap.type = THREE.PCFSoftShadowMap;
         }}
       >
         <color attach="background" args={["#eee7dc"]} />

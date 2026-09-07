@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { cameraShot, sceneDefinitions, sceneTimeline, viewportClass } from "@/experience/config/scenes";
 import { storyMotion } from "@/experience/config/storyMotion";
@@ -58,6 +58,23 @@ function setSplineVector(target: THREE.Vector3, width: number, from: number, t: 
 export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) {
   const sun = useRef<THREE.DirectionalLight>(null);
   const rim = useRef<THREE.PointLight>(null);
+
+  useEffect(() => {
+    const light = sun.current;
+    if (!light) return;
+    light.castShadow = quality === "high";
+    light.shadow.mapSize.set(1024, 1024);
+    light.shadow.bias = -0.00025;
+    light.shadow.normalBias = 0.025;
+    const camera = light.shadow.camera as THREE.OrthographicCamera;
+    camera.left = -17;
+    camera.right = 17;
+    camera.top = 17;
+    camera.bottom = -17;
+    camera.near = 0.5;
+    camera.far = 42;
+    camera.updateProjectionMatrix();
+  }, [quality]);
 
   useFrame((state, delta) => {
     const progress = useExperienceStore.getState().progress;
@@ -142,9 +159,10 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
 
   return (
     <>
-      <hemisphereLight args={["#ffffff", "#a9aaa5", quality === "high" ? 1.1 : 0.92]} />
-      <directionalLight ref={sun} position={[6, 10, 5]} intensity={2.2} castShadow={false} />
-      <pointLight ref={rim} position={[-6, 4.5, -4]} intensity={6.5} distance={25} decay={2} />
+      <hemisphereLight args={["#fffaf1", "#90958d", quality === "high" ? 1.02 : 0.90]} />
+      <directionalLight ref={sun} position={[6, 10, 5]} intensity={2.2} castShadow={quality === "high"} />
+      <pointLight ref={rim} position={[-6, 4.5, -4]} intensity={5.8} distance={25} decay={2} />
+      <pointLight position={[3.5, 2.6, 5.5]} color="#ffd7a0" intensity={quality === "high" ? 1.25 : 0.75} distance={15} decay={2} />
     </>
   );
 }

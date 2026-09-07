@@ -14,6 +14,7 @@ type MaterialBinding = {
   opacity: number;
   emissiveIntensity: number;
   pulse: boolean;
+  stableDepthWrite: boolean;
 };
 
 function AssetFailureMarker() {
@@ -40,11 +41,34 @@ function tuneMaterial(material: THREE.MeshStandardMaterial) {
   } else if (material.name === "BlackGlass") {
     material.roughness = Math.min(material.roughness, 0.16);
     material.metalness = Math.max(material.metalness, 0.5);
+  } else if (material.name === "VisionGlass") {
+    material.roughness = Math.min(material.roughness, 0.11);
+    material.metalness = Math.max(material.metalness, 0.16);
+    material.opacity = Math.min(material.opacity, 0.72);
+    material.transparent = true;
+    material.depthWrite = false;
   } else if (material.name === "Concrete" || material.name === "Asphalt") {
     material.roughness = Math.max(material.roughness, 0.82);
   } else if (material.name === "Facade") {
     material.roughness = Math.min(material.roughness, 0.48);
     material.metalness = Math.max(material.metalness, 0.34);
+  } else if (material.name === "Aluminum") {
+    material.roughness = Math.min(material.roughness, 0.30);
+    material.metalness = Math.max(material.metalness, 0.78);
+  } else if (material.name === "Roof") {
+    material.roughness = Math.max(material.roughness, 0.68);
+    material.metalness = Math.min(material.metalness, 0.24);
+  } else if (material.name === "Warning") {
+    material.roughness = 0.55;
+  } else if (material.name === "Rubber") {
+    material.roughness = 0.92;
+    material.metalness = 0;
+  } else if (material.name === "Shadow") {
+    material.roughness = 1;
+    material.metalness = 0;
+    material.opacity = Math.min(material.opacity, 0.36);
+    material.transparent = true;
+    material.depthWrite = false;
   } else if (material.name === "Bronze" || material.name === "Copper") {
     material.emissive.set("#21160a");
     material.emissiveIntensity = Math.max(material.emissiveIntensity, 0.08);
@@ -60,7 +84,7 @@ function tuneMaterial(material: THREE.MeshStandardMaterial) {
   } else if (material.name === "Water") {
     material.roughness = Math.min(material.roughness, 0.18);
     material.metalness = Math.max(material.metalness, 0.4);
-  } else if (material.name === "Vegetation" || material.name === "Recycled") {
+  } else if (material.name === "Vegetation" || material.name === "VegetationDark" || material.name === "Recycled") {
     material.roughness = Math.max(material.roughness, 0.75);
   } else if (material.name === "GreenGlow") {
     material.emissive.set("#173d25");
@@ -71,7 +95,7 @@ function tuneMaterial(material: THREE.MeshStandardMaterial) {
   material.needsUpdate = true;
 }
 
-export function SceneAsset({ definition, sceneIndex, onReady }: { definition: SceneDefinition; sceneIndex: number; onReady?: () => void }) {
+export function SceneAsset({ definition, sceneIndex, quality, onReady }: { definition: SceneDefinition; sceneIndex: number; quality: "high" | "medium"; onReady?: () => void }) {
   const root = useRef<THREE.Group>(null);
   const smoothed = useRef(sceneWeight(sceneIndex, useExperienceStore.getState().progress));
   const { gltf, failed } = useSceneAsset(definition.asset);
@@ -104,23 +128,30 @@ export function SceneAsset({ definition, sceneIndex, onReady }: { definition: Sc
             material.transparent = true;
             // Stable chapters render with normal depth writes for crisp architectural
             // occlusion. During cross-fades we temporarily disable depth writing so
-            // the incoming environment can blend without hard clipping.
-            material.depthWrite = true;
+            // the incoming environment can blend without hard clipping. Glass and
+            // authored contact-shadow decals never write depth.
+            const stableDepthWrite = material.name !== "VisionGlass" && material.name !== "Shadow";
+            material.depthWrite = stableDepthWrite;
             materialBindings.push({
               material,
               opacity: material.opacity,
               emissiveIntensity: material.emissiveIntensity,
               pulse: material.name === "ServerFace",
+              stableDepthWrite,
             });
           }
         }
         return material;
       });
       mesh.material = Array.isArray(mesh.material) ? clonedMaterials : clonedMaterials[0];
+      const names = clonedMaterials.map((material) => material.name);
+      const translucentOnly = names.every((name) => name === "VisionGlass" || name === "Shadow" || name === "WarmGlow" || name === "CoolGlow");
+      mesh.castShadow = quality === "high" && !translucentOnly;
+      mesh.receiveShadow = quality === "high" && names.every((name) => name !== "VisionGlass" && name !== "Shadow");
     });
 
     return { instance: cloned, bindings: materialBindings };
-  }, [gltf]);
+  }, [gltf, quality]);
 
   useEffect(() => {
     if (instance) onReady?.();
@@ -161,7 +192,7 @@ export function SceneAsset({ definition, sceneIndex, onReady }: { definition: Sc
     for (const binding of bindings) {
       const material = binding.material;
       material.opacity = binding.opacity * fade;
-      const shouldWriteDepth = fade > 0.965;
+      const shouldWriteDepth = binding.stableDepthWrite && fade > 0.965;
       if (material.depthWrite !== shouldWriteDepth) {
         material.depthWrite = shouldWriteDepth;
         material.needsUpdate = true;
