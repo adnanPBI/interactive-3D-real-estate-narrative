@@ -73,13 +73,11 @@ jobs:
       - name: Reconstruct legacy low-LOD authoring inputs
         run: |
           set -euo pipefail
-          mkdir -p public/models/stage3
-          cp public/models/r5/medium/hero-campus.glb public/models/stage3/hero-campus.glb
-          cp public/models/r5/medium/manufacturing.glb public/models/stage3/manufacturing.glb
-          cp public/models/r5/medium/power-generation.glb public/models/stage3/power-generation.glb
-          cp public/models/r5/medium/data-centers.glb public/models/stage3/data-centers.glb
-          cp public/models/r5/medium/recycling.glb public/models/stage3/recycling.glb
-          cp public/models/r5/medium/closing-platform.glb public/models/stage3/closing-platform.glb
+          mkdir -p public/models/stage3 public/models/stage2
+          for name in hero-campus manufacturing power-generation data-centers recycling closing-platform; do
+            cp "public/models/r5/medium/${name}.glb" "public/models/stage3/${name}.glb"
+            cp "public/models/r5/medium/${name}.glb" "public/models/stage2/${name}.glb"
+          done
 
       - name: Generate R6 four-LOD hero pack and KTX2 textures
         run: npm run assets:r6
@@ -107,7 +105,7 @@ jobs:
       - name: Persist R6 source and generated runtime assets to main
         run: |
           set -euo pipefail
-          rm -rf scripts/__pycache__ assets-source/r6/authoring/__pycache__ .r6-raw public/models/stage3
+          rm -rf scripts/__pycache__ assets-source/r6/authoring/__pycache__ .r6-raw public/models/stage3 public/models/stage2
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
