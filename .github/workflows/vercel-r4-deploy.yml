@@ -1,4 +1,4 @@
-name: Deploy R5 Hybrid Cinematic to Vercel
+name: Deploy R6 Hero Fidelity to Vercel
 
 on:
   push:
@@ -10,8 +10,10 @@ on:
       - "content/**"
       - "experience/**"
       - "lib/**"
-      - "assets-source/r4/**"
+      - "assets-source/r6/**"
       - "scripts/**"
+      - "tests/r6-*.test.mjs"
+      - "public/fallback/r6/**"
       - "requirements-assets.txt"
       - "next.config.ts"
       - "package.json"
@@ -29,66 +31,94 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - name: Apply one-time R5 source upgrade
+
+      - name: Apply one-time R6 source upgrade
         run: |
           set -euo pipefail
-          if compgen -G "scripts/r5-source.patch.gz.b64.part-*" > /dev/null; then
-            cat scripts/r5-source.patch.gz.b64.part-* | base64 --decode | gzip --decompress > /tmp/r5-source.patch
-            git apply --check --exclude=README.md /tmp/r5-source.patch
-            git apply --exclude=README.md /tmp/r5-source.patch
-            rm scripts/r5-source.patch.gz.b64.part-*
+          if compgen -G "scripts/r6-source.patch.gz.b64.part-*" > /dev/null; then
+            cat scripts/r6-source.patch.gz.b64.part-* | base64 --decode | gzip --decompress > /tmp/r6-source.patch
+            git apply --check --exclude=.github/workflows/vercel-r4-deploy.yml /tmp/r6-source.patch
+            git apply --exclude=.github/workflows/vercel-r4-deploy.yml /tmp/r6-source.patch
+            rm scripts/r6-source.patch.gz.b64.part-*
           else
-            echo "R5 source upgrade is already materialized on main."
+            echo "R6 source upgrade is already materialized on main."
           fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: requirements-assets.txt
-      - name: Install exact Node dependencies
+
+      - name: Install exact application dependencies
         run: npm ci
+
       - name: Install asset-authoring dependencies
         run: python -m pip install --disable-pip-version-check -r requirements-assets.txt
-      - name: Generate deterministic R5 high and medium hero assets
-        run: npm run assets:r5
+
+      - name: Install temporary KTX2 authoring tools
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts \
+            @gltf-transform/core@4.2.1 \
+            @gltf-transform/extensions@4.2.1 \
+            ktx2-encoder@0.6.0 \
+            sharp@0.34.5
+
+      - name: Generate R6 four-LOD hero pack and KTX2 textures
+        run: npm run assets:r6
+
       - name: TypeScript gate
         run: npm run typecheck
-      - name: R5 hybrid visual-fidelity gate
-        run: npm run validate:corporate:r5
+
+      - name: R6 corporate fidelity gate
+        run: npm run validate:corporate:r6
+
+      - name: R6 material and SMAA gate
+        run: npm run validate:r6:materials
+
+      - name: R6 active-scene budget gate
+        run: npm run validate:r6:budgets
+
+      - name: R6 focused tests
+        run: npm run qa:r6
+
       - name: Production build gate
         env:
           VERCEL: "1"
         run: npm run build
-      - name: Persist R5 source and generated runtime assets to main
+
+      - name: Persist R6 source and generated runtime assets to main
         run: |
           set -euo pipefail
-          rm -rf scripts/__pycache__
+          rm -rf scripts/__pycache__ assets-source/r6/authoring/__pycache__ .r6-raw
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
-            package.json package-lock.json \
-            components/experience/AssetPreloader.tsx \
-            components/experience/CinematicCameraRig.tsx \
-            components/experience/ExperienceCanvas.tsx \
-            components/experience/InstancedSolarField.tsx \
-            components/experience/PerformanceGovernor.tsx \
-            components/experience/SceneAsset.tsx \
-            components/experience/StoryWorld.tsx \
-            experience/config/scenes.ts experience/config/storyMotion.ts \
-            docs/corporate/R5_HYBRID_CINEMATIC_UPGRADE.md \
-            scripts/generate-r5-hybrid-assets.py scripts/validate-corporate-r5.mjs \
-            public/models/r5 public/fallback/r5 assets-source/r4/textures
+            .gitignore package.json package-lock.json requirements-assets.txt \
+            components/experience \
+            experience/config experience/systems \
+            lib/experienceStore.ts types/qa.d.ts app/globals.css \
+            assets-source/r6 \
+            scripts/generate-r6-assets.py scripts/encode-r6-ktx2.mjs \
+            scripts/validate-corporate-r6.mjs scripts/validate-r6-materials.mjs scripts/validate-r6-budgets.mjs \
+            scripts/render-r6-fallbacks.py \
+            tests/r6-assets.test.mjs tests/r6-runtime.test.mjs tests/r6-budgets.test.mjs \
+            public/models/r6 public/fallback/r6 \
+            docs/corporate/R6_HERO_FIDELITY_IMPLEMENTATION.md docs/R6_CAVEATS.md docs/R6_CLAUDE_CHERRYPICK.md R6_FINAL_HANDOFF.md \
+            .github/workflows/vercel-r4-deploy.yml
           git add -u scripts
           if git diff --cached --quiet; then
-            echo "R5 source and assets already match main."
+            echo "R6 source and assets already match main."
           else
-            git commit -m "feat(r5): refresh deterministic hybrid assets [skip ci]"
+            git commit -m "feat(r6): hero fidelity, four LODs, KTX2 and SMAA [skip ci]"
             git push origin HEAD:main
           fi
+
       - name: Verify Vercel token
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -98,6 +128,7 @@ jobs:
           STATUS=$(curl -sS -o /tmp/vercel-user.json -w '%{http_code}' -H "Authorization: Bearer ${VERCEL_TOKEN}" https://api.vercel.com/v2/user)
           echo "Vercel /v2/user HTTP status: ${STATUS}"
           test "$STATUS" = "200"
+
       - name: Link and deploy production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -110,10 +141,11 @@ jobs:
           npx vercel@latest deploy --prod --yes \
             --scope adnans-projects-1993fd6c \
             --token "$VERCEL_TOKEN" 2>&1 | tee vercel-deploy.log
+
       - name: Upload deployment log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vercel-r5-hybrid-deploy-log
+          name: vercel-r6-hero-fidelity-deploy-log
           path: vercel-deploy.log
           if-no-files-found: ignore
