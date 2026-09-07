@@ -27,21 +27,20 @@ jobs:
         run: npm run validate:corporate:r4
       - name: Deploy production to Vercel
         env:
-          VERCEL_TOKEN_1: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_TOKEN_2: ${{ secrets.VERCEL_ACCESS_TOKEN }}
-          VERCEL_TOKEN_3: ${{ secrets.VERCEL_API_TOKEN }}
-          VERCEL_TOKEN_4: ${{ secrets.TURBO_TOKEN }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           set -euo pipefail
-          TOKEN="${VERCEL_TOKEN_1:-}"
-          SOURCE_NAME="VERCEL_TOKEN"
-          if [ -z "$TOKEN" ] && [ -n "${VERCEL_TOKEN_2:-}" ]; then TOKEN="$VERCEL_TOKEN_2"; SOURCE_NAME="VERCEL_ACCESS_TOKEN"; fi
-          if [ -z "$TOKEN" ] && [ -n "${VERCEL_TOKEN_3:-}" ]; then TOKEN="$VERCEL_TOKEN_3"; SOURCE_NAME="VERCEL_API_TOKEN"; fi
-          if [ -z "$TOKEN" ] && [ -n "${VERCEL_TOKEN_4:-}" ]; then TOKEN="$VERCEL_TOKEN_4"; SOURCE_NAME="TURBO_TOKEN"; fi
-          if [ -z "$TOKEN" ]; then
-            echo "::error::No usable Vercel CLI token secret is configured. Checked VERCEL_TOKEN, VERCEL_ACCESS_TOKEN, VERCEL_API_TOKEN and TURBO_TOKEN."
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "::error::GitHub repository secret VERCEL_TOKEN is not configured."
             exit 2
           fi
-          echo "Using configured Vercel credential from $SOURCE_NAME (value masked)."
-          npx vercel@latest whoami --token "$TOKEN"
-          npx vercel@latest --prod --yes --token "$TOKEN"
+          case "$VERCEL_TOKEN" in
+            vcp_*) ;;
+            *)
+              echo "::error::VERCEL_TOKEN must be a Vercel personal access token (vcp_...), not an API key or other credential type."
+              exit 2
+              ;;
+          esac
+          echo "Vercel personal access token detected (value masked)."
+          npx vercel@latest whoami --token "$VERCEL_TOKEN"
+          npx vercel@latest --prod --yes --token "$VERCEL_TOKEN"
