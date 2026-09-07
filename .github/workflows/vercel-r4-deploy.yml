@@ -37,10 +37,16 @@ jobs:
           case "$VERCEL_TOKEN" in
             vcp_*) ;;
             *)
-              echo "::error::VERCEL_TOKEN must be a Vercel personal access token (vcp_...), not an API key or other credential type."
+              echo "::error::VERCEL_TOKEN must be a Vercel personal access token (vcp_...)."
               exit 2
               ;;
           esac
           echo "Vercel personal access token detected (value masked)."
-          npx vercel@latest whoami --token "$VERCEL_TOKEN"
-          npx vercel@latest --prod --yes --token "$VERCEL_TOKEN"
+          npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN" 2>&1 | tee vercel-deploy.log
+      - name: Upload deployment log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vercel-r4-deploy-log
+          path: vercel-deploy.log
+          if-no-files-found: ignore
