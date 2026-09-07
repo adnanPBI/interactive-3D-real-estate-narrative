@@ -5,6 +5,7 @@ on:
     branches: ["main"]
     paths:
       - ".github/workflows/vercel-r4-deploy.yml"
+      - ".gitignore"
       - "app/**"
       - "components/**"
       - "content/**"
