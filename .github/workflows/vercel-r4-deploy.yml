@@ -27,11 +27,20 @@ jobs:
         run: npm run validate:corporate:r4
       - name: Deploy production to Vercel
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TOKEN_1: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TOKEN_2: ${{ secrets.VERCEL_ACCESS_TOKEN }}
+          VERCEL_TOKEN_3: ${{ secrets.VERCEL_API_TOKEN }}
+          VERCEL_TOKEN_4: ${{ secrets.TURBO_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "${VERCEL_TOKEN:-}" ]; then
-            echo "::error::GitHub secret VERCEL_TOKEN is not configured for this repository."
+          TOKEN="${VERCEL_TOKEN_1:-}"
+          SOURCE_NAME="VERCEL_TOKEN"
+          if [ -z "$TOKEN" ] && [ -n "${VERCEL_TOKEN_2:-}" ]; then TOKEN="$VERCEL_TOKEN_2"; SOURCE_NAME="VERCEL_ACCESS_TOKEN"; fi
+          if [ -z "$TOKEN" ] && [ -n "${VERCEL_TOKEN_3:-}" ]; then TOKEN="$VERCEL_TOKEN_3"; SOURCE_NAME="VERCEL_API_TOKEN"; fi
+          if [ -z "$TOKEN" ] && [ -n "${VERCEL_TOKEN_4:-}" ]; then TOKEN="$VERCEL_TOKEN_4"; SOURCE_NAME="TURBO_TOKEN"; fi
+          if [ -z "$TOKEN" ]; then
+            echo "::error::No usable Vercel CLI token secret is configured. Checked VERCEL_TOKEN, VERCEL_ACCESS_TOKEN, VERCEL_API_TOKEN and TURBO_TOKEN."
             exit 2
           fi
-          npx vercel@latest --prod --yes --token "$VERCEL_TOKEN" --scope adnans-projects-1993fd6c
+          echo "Using configured Vercel credential from $SOURCE_NAME (value masked)."
+          npx vercel@latest --prod --yes --token "$TOKEN" --scope adnans-projects-1993fd6c
