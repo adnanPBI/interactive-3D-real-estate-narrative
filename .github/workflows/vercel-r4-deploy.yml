@@ -1,4 +1,4 @@
-name: Deploy R4.1 to Vercel
+name: Deploy R5 Hybrid Cinematic to Vercel
 
 on:
   push:
@@ -29,25 +29,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - name: Apply one-time R4.1 source polish patch
+      - name: Apply one-time R5 source upgrade
         run: |
           set -euo pipefail
-          if compgen -G "scripts/r4-1-polish.patch.gz.b64.part-*" > /dev/null; then
-            cat scripts/r4-1-polish.patch.gz.b64.part-* | base64 --decode | gzip --decompress > /tmp/r4-1-polish.patch
-            APPLY_ARGS=(
-              --include=components/experience/CinematicCameraRig.tsx
-              --include=components/experience/ExperienceCanvas.tsx
-              --include=components/experience/SceneAsset.tsx
-              --include=components/experience/StoryWorld.tsx
-              --include=package.json
-              --include=scripts/generate-r4-assets.py
-              --include=scripts/validate-corporate-r4.mjs
-            )
-            git apply --check "${APPLY_ARGS[@]}" /tmp/r4-1-polish.patch
-            git apply "${APPLY_ARGS[@]}" /tmp/r4-1-polish.patch
-            rm scripts/r4-1-polish.patch.gz.b64.part-*
+          if compgen -G "scripts/r5-source.patch.gz.b64.part-*" > /dev/null; then
+            cat scripts/r5-source.patch.gz.b64.part-* | base64 --decode | gzip --decompress > /tmp/r5-source.patch
+            git apply --check /tmp/r5-source.patch
+            git apply /tmp/r5-source.patch
+            rm scripts/r5-source.patch.gz.b64.part-*
           else
-            echo "R4.1 source patch already materialized on main."
+            echo "R5 source upgrade is already materialized on main."
           fi
       - uses: actions/setup-node@v4
         with:
@@ -60,61 +51,52 @@ jobs:
           cache-dependency-path: requirements-assets.txt
       - name: Install exact Node dependencies
         run: npm ci
-      - name: Install exact asset-authoring dependencies
+      - name: Install asset-authoring dependencies
         run: python -m pip install --disable-pip-version-check -r requirements-assets.txt
-      - name: Generate polished R4.1 GLBs
-        run: npm run assets:r4
+      - name: Generate deterministic R5 high and medium hero assets
+        run: npm run assets:r5
       - name: TypeScript gate
         run: npm run typecheck
-      - name: R4.1 runtime visual asset gate
-        env:
-          R4_RUNTIME_ONLY: "1"
-        run: npm run validate:corporate:r4
-      - name: Next.js production build
+      - name: R5 hybrid visual-fidelity gate
+        run: npm run validate:corporate:r5
+      - name: Production build gate
         env:
           VERCEL: "1"
         run: npm run build
-      - name: Persist deterministic R4.1 source and runtime assets to main
+      - name: Persist R5 source and generated runtime assets to main
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
-            package.json \
+            README.md package.json package-lock.json \
+            components/experience/AssetPreloader.tsx \
             components/experience/CinematicCameraRig.tsx \
             components/experience/ExperienceCanvas.tsx \
+            components/experience/InstancedSolarField.tsx \
+            components/experience/PerformanceGovernor.tsx \
             components/experience/SceneAsset.tsx \
             components/experience/StoryWorld.tsx \
-            public/models/r4 public/fallback/r4 assets-source/r4/textures \
-            scripts/generate-r4-assets.py scripts/validate-corporate-r4.mjs
+            experience/config/scenes.ts experience/config/storyMotion.ts \
+            docs/corporate/R5_HYBRID_CINEMATIC_UPGRADE.md \
+            public/models/r5 public/fallback/r5 assets-source/r4/textures
           git add -A scripts
           if git diff --cached --quiet; then
-            echo "Generated R4.1 assets already match main."
+            echo "R5 source and assets already match main."
           else
-            git commit -m "assets(r4.1): regenerate polished cinematic GLBs [skip ci]"
-            if ! git push origin HEAD:main; then
-              echo "::warning::Could not persist generated R4.1 assets to main; continuing with the validated workspace deployment."
-            fi
+            git commit -m "feat(r5): hybrid cinematic fidelity upgrade [skip ci]"
+            git push origin HEAD:main
           fi
-      - name: Verify Vercel REST authentication
+      - name: Verify Vercel token
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "${VERCEL_TOKEN:-}" ]; then
-            echo "::error::GitHub repository secret VERCEL_TOKEN is not configured."
-            exit 2
-          fi
-          STATUS=$(curl -sS -o vercel-auth.json -w "%{http_code}" \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-            https://api.vercel.com/v2/user)
+          test -n "${VERCEL_TOKEN:-}" || { echo "::error::VERCEL_TOKEN is not configured"; exit 2; }
+          STATUS=$(curl -sS -o /tmp/vercel-user.json -w '%{http_code}' -H "Authorization: Bearer ${VERCEL_TOKEN}" https://api.vercel.com/v2/user)
           echo "Vercel /v2/user HTTP status: ${STATUS}"
-          if [ "$STATUS" != "200" ]; then
-            node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync("vercel-auth.json","utf8")); const e=x.error||{}; console.error(`Vercel auth error: ${e.code||"unknown"}: ${e.message||"request rejected"}`);'
-            exit 3
-          fi
-          node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync("vercel-auth.json","utf8")); console.log(`Vercel REST authentication PASS for ${x.user?.username||x.user?.name||"authenticated user"}.`);'
-      - name: Link target Vercel project
+          test "$STATUS" = "200"
+      - name: Link and deploy production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
@@ -123,11 +105,6 @@ jobs:
             --project interactive-3d-real-estate-narrative-r4 \
             --scope adnans-projects-1993fd6c \
             --token "$VERCEL_TOKEN"
-      - name: Deploy production to Vercel
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          set -euo pipefail
           npx vercel@latest deploy --prod --yes \
             --scope adnans-projects-1993fd6c \
             --token "$VERCEL_TOKEN" 2>&1 | tee vercel-deploy.log
@@ -135,6 +112,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vercel-r4-1-deploy-log
+          name: vercel-r5-hybrid-deploy-log
           path: vercel-deploy.log
           if-no-files-found: ignore
