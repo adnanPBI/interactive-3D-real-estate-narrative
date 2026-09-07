@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
+const runtimeOnly = process.env.R4_RUNTIME_ONLY === '1';
 const manifestPath = path.join(root, 'public/models/r4/manifest.json');
 const scenesPath = path.join(root, 'experience/config/scenes.ts');
 const sceneAssetPath = path.join(root, 'components/experience/SceneAsset.tsx');
@@ -29,12 +30,14 @@ for (const name of names) {
   const fallback = path.join(root, 'public/fallback/r4', `${name}.svg`);
   if (!fs.existsSync(glb)) throw new Error(`Missing R4 GLB: ${glb}`);
   if (!fs.existsSync(fallback)) throw new Error(`Missing R4 fallback: ${fallback}`);
+  const actualBytes = fs.statSync(glb).size;
+  if (actualBytes !== item.bytes) throw new Error(`${name} manifest byte count ${item.bytes} does not match file ${actualBytes}`);
   if (item.bytes < 500_000 || item.bytes > 8 * 1024 * 1024) throw new Error(`${name} GLB byte budget out of range: ${item.bytes}`);
   if (item.triangles < 5_000 || item.triangles > 180_000) throw new Error(`${name} triangle budget out of range: ${item.triangles}`);
   if (item.meshGroups < 8 || item.meshGroups > 24) throw new Error(`${name} mesh-group budget out of range: ${item.meshGroups}`);
   if (!Array.isArray(item.materials) || item.materials.length < 8) throw new Error(`${name} has insufficient authored material variety.`);
   totalTris += item.triangles;
-  totalBytes += item.bytes;
+  totalBytes += actualBytes;
 }
 
 const scenes = fs.readFileSync(scenesPath, 'utf8');
@@ -54,13 +57,17 @@ for (const token of ['sphereGeometry args={[1, 32, 16]}','uSunStrength','depthWr
   if (!sky.includes(token)) throw new Error(`R4 atmospheric sky contract missing: ${token}`);
 }
 
-const boardFiles = [
-  '01-integrated-platform.png','02-solar-manufacturing.png','03-power-generation.png',
-  '04-data-centers.png','05-recycling.png','06-connected-ecosystem.png'
-];
-for (const board of boardFiles) {
-  const full = path.join(boardsDir, board);
-  if (!fs.existsSync(full) || fs.statSync(full).size < 100_000) throw new Error(`R4 art-direction board missing/invalid: ${board}`);
+if (!runtimeOnly) {
+  const boardFiles = [
+    '01-integrated-platform.png','02-solar-manufacturing.png','03-power-generation.png',
+    '04-data-centers.png','05-recycling.png','06-connected-ecosystem.png'
+  ];
+  for (const board of boardFiles) {
+    const full = path.join(boardsDir, board);
+    if (!fs.existsSync(full) || fs.statSync(full).size < 100_000) throw new Error(`R4 art-direction board missing/invalid: ${board}`);
+  }
+} else {
+  console.log('R4 runtime-only validation: documentation art-direction boards intentionally excluded from deployment gate.');
 }
 
 console.log(`Corporate R4 visual-fidelity PASS: 6 GLBs, ${totalTris.toLocaleString()} triangles, ${(totalBytes/1024/1024).toFixed(2)} MiB.`);
