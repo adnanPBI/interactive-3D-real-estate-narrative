@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Surgical compatibility repair for generated/bootstrap R6 source.
+"""Idempotent repair for bootstrap/materialized R6 source.
 
-The R6 source path is produced later in the asset-authoring pipeline on the
-first materialization run. This helper is intentionally idempotent: it is safe
-to call both before and after asset generation.
-
-It also hardens the R6 asset generator so its final proxy artifacts are rebuilt
-deterministically from the final LOD2 GLBs before downstream KTX2 encoding.
+Besides current Three/TypeScript compatibility, this helper hardens the R6
+asset-authoring command so the final proxy GLBs are deterministically rebuilt
+from the final LOD2 GLBs before downstream KTX2 encoding. This deliberately
+avoids any display-server or GPU dependency.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
 import sys
@@ -17,7 +16,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "components" / "experience" / "R6HeroAsset.tsx"
 GENERATOR = ROOT / "scripts" / "generate-r6-assets.py"
-PROXY_MARKER = "R6_TRUE_PROXY_REDUCTION"
+PACKAGE = ROOT / "package.json"
+REDUCER_COMMAND = "python3 tools/reduce-r6-proxies.py --root public/models/r6 --ratio 0.55"
 
 
 def repair_runtime_source() -> int:
@@ -27,8 +27,6 @@ def repair_runtime_source() -> int:
 
     text = TARGET.read_text(encoding="utf-8")
     original = text
-
-    # TS7006: annotate only a bare parameter named `media`.
     text = re.sub(
         r"\(\s*media\s*\)\s*=>",
         "(media: MediaQueryList | MediaQueryListEvent) =>",
@@ -39,23 +37,17 @@ def repair_runtime_source() -> int:
         r"function \1(media: MediaQueryList | MediaQueryListEvent)",
         text,
     )
-
-    # TS2339: WebGLRenderer has no public `.samples`; query the actual context.
     text = re.sub(
         r"\bgl\.samples\b",
         "(gl.getContext().getContextAttributes()?.antialias ? 4 : 0)",
         text,
     )
 
-    # TS2345: the bootstrap warm-up used an Object3D[] where current Three
-    # expects a Scene. Shader precompile is optional; omit this warm-up rather
-    # than passing an invalid runtime object or suppressing the type system.
-    patterns = [
+    for pattern in [
         r"await\s+gl\.compileAsync\([\s\S]*?\);",
         r"void\s+gl\.compileAsync\([\s\S]*?\);",
         r"gl\.compileAsync\([\s\S]*?\);",
-    ]
-    for pattern in patterns:
+    ]:
         next_text, count = re.subn(
             pattern,
             "Promise.resolve(); // R6: optional shader warm-up omitted for renderer compatibility",
@@ -85,58 +77,50 @@ def repair_runtime_source() -> int:
     return 0
 
 
-def repair_generator_proxy_derivation() -> int:
-    if not GENERATOR.exists():
-        print(f"R6 generator not present yet: {GENERATOR.relative_to(ROOT)}")
-        return 0
-
-    text = GENERATOR.read_text(encoding="utf-8")
-    if PROXY_MARKER in text:
-        print(f"R6 generator already derives proxies from LOD2: {GENERATOR.relative_to(ROOT)}")
-        return 0
-
-    helper = '''\n\ndef _r6_generate_true_proxies_from_lod2() -> None:\n    # R6_TRUE_PROXY_REDUCTION: final proxy artifacts are derived from final LOD2.\n    # Keep this call inside the generator, before the package pipeline performs\n    # KTX2 encoding, so proxy materials/textures are encoded exactly once.\n    import subprocess as _subprocess\n    import sys as _sys\n    from pathlib import Path as _Path\n\n    _root = _Path(__file__).resolve().parents[1]\n    _subprocess.run(\n        [\n            _sys.executable,\n            str(_root / "tools" / "reduce-r6-proxies.py"),\n            "--root",\n            str(_root / "public" / "models" / "r6"),\n            "--ratio",\n            "0.55",\n        ],\n        check=True,\n    )\n'''
-
-    guard = re.search(
-        r'(?m)^if __name__ == ["\\\']__main__["\\\']:\s*\n(?P<indent>[ \t]+)(?P<call>(?:raise\s+SystemExit\(main\(\)\)|main\(\)))\s*$',
-        text,
-    )
-    if not guard:
-        print(
-            "ERROR: unable to locate generate-r6-assets.py main guard for proxy hardening",
-            file=sys.stderr,
-        )
+def repair_asset_pipeline() -> int:
+    if not PACKAGE.exists():
+        print("ERROR: package.json is missing", file=sys.stderr)
         return 4
 
-    indent = guard.group("indent")
-    call = guard.group("call")
-    if call.startswith("raise"):
-        replacement = (
-            helper
-            + '\nif __name__ == "__main__":\n'
-            + f"{indent}_r6_status = main()\n"
-            + f"{indent}_r6_generate_true_proxies_from_lod2()\n"
-            + f"{indent}raise SystemExit(_r6_status)"
-        )
-    else:
-        replacement = (
-            helper
-            + '\nif __name__ == "__main__":\n'
-            + f"{indent}main()\n"
-            + f"{indent}_r6_generate_true_proxies_from_lod2()"
-        )
+    package = json.loads(PACKAGE.read_text(encoding="utf-8"))
+    scripts = package.setdefault("scripts", {})
+    command = scripts.get("assets:r6")
+    if not command:
+        print("ERROR: R6 source patch did not define npm script assets:r6", file=sys.stderr)
+        return 5
 
-    text = text[: guard.start()] + replacement + text[guard.end() :]
-    GENERATOR.write_text(text, encoding="utf-8")
-    print(f"Hardened {GENERATOR.relative_to(ROOT)}: final proxy source is final LOD2.")
+    if REDUCER_COMMAND not in command:
+        encoder = "node scripts/encode-r6-ktx2.mjs"
+        if encoder in command:
+            command = command.replace(encoder, f"{REDUCER_COMMAND} && {encoder}", 1)
+        else:
+            # Preserve every bootstrap command and append the reducer. The
+            # generated source currently exposes the KTX2 encoder separately;
+            # the diagnostic below makes any future pipeline change visible.
+            command = f"{command} && {REDUCER_COMMAND}"
+        scripts["assets:r6"] = command
+        PACKAGE.write_text(json.dumps(package, indent=2) + "\n", encoding="utf-8")
+        print("Hardened npm assets:r6: final proxy source is final LOD2.")
+    else:
+        print("npm assets:r6 already contains the final LOD2 proxy reducer.")
+
+    print(f"assets:r6 command: {scripts['assets:r6']}")
+
+    # The generator is intentionally left semantically untouched on bootstrap;
+    # the reducer is part of the generator command and therefore runs after the
+    # generator emits final LOD2 and before KTX2 encoding. Once the source is
+    # materialized on main it can be edited directly without guessing at patch
+    # internals.
+    if GENERATOR.exists():
+        print(f"R6 generator materialized: {GENERATOR.relative_to(ROOT)} ({GENERATOR.stat().st_size} bytes)")
     return 0
 
 
 def main() -> int:
-    runtime_status = repair_runtime_source()
-    if runtime_status:
-        return runtime_status
-    return repair_generator_proxy_derivation()
+    status = repair_runtime_source()
+    if status:
+        return status
+    return repair_asset_pipeline()
 
 
 if __name__ == "__main__":
