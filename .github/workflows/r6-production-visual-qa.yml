@@ -1,0 +1,173 @@
+name: R6 Production Visual QA
+
+on:
+  workflow_run:
+    workflows: ["Deploy R6 Hero Fidelity to Vercel"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Optional production/preview URL to inspect"
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  capture:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install visual QA driver
+        run: python -m pip install --disable-pip-version-check selenium==4.35.0 Pillow==12.3.0
+
+      - name: Resolve deployed URL from source workflow
+        id: deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANUAL_URL: ${{ inputs.url }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          if [ -n "${MANUAL_URL:-}" ]; then
+            URL="$MANUAL_URL"
+          else
+            test -n "${SOURCE_RUN_ID:-}" || { echo "::error::No source workflow run id"; exit 2; }
+            mkdir -p /tmp/r6-deploy-log
+            ART_ID=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" \
+              --jq '.artifacts[] | select(.name=="vercel-r6-hero-fidelity-deploy-log") | .id' | head -n 1)
+            test -n "$ART_ID" || { echo "::error::Deployment-log artifact not found"; exit 3; }
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ART_ID}/zip" > /tmp/r6-deploy.zip
+            unzip -q /tmp/r6-deploy.zip -d /tmp/r6-deploy-log
+            URL=$(grep -Eho 'https://[A-Za-z0-9._-]+\.vercel\.app' /tmp/r6-deploy-log/* | tail -n 1 || true)
+          fi
+          test -n "${URL:-}" || { echo "::error::Unable to resolve Vercel deployment URL"; exit 4; }
+          URL="${URL%/}"
+          echo "Resolved production URL: $URL"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for production readiness
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 36); do
+            CODE=$(curl -L -sS -o /tmp/r6-home.html -w '%{http_code}' "$URL" || true)
+            if [ "$CODE" = "200" ]; then
+              echo "Production homepage returned HTTP 200."
+              exit 0
+            fi
+            echo "Attempt $i: HTTP ${CODE:-none}; retrying..."
+            sleep 5
+          done
+          echo "::error::Production homepage did not become ready"
+          exit 5
+
+      - name: Capture six production hero chapters
+        env:
+          BASE_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          mkdir -p visual-qa/r6
+          python - <<'PY'
+          import json
+          import os
+          import time
+          from pathlib import Path
+          from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+
+          from PIL import Image
+          from selenium import webdriver
+          from selenium.common.exceptions import TimeoutException
+          from selenium.webdriver.chrome.options import Options
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+
+          out = Path('visual-qa/r6')
+          base = os.environ['BASE_URL'].rstrip('/')
+          parts = urlsplit(base)
+          query = dict(parse_qsl(parts.query))
+          query['quality'] = 'high'
+          url = urlunsplit((parts.scheme, parts.netloc, parts.path or '/', urlencode(query), parts.fragment))
+
+          options = Options()
+          options.add_argument('--headless=new')
+          options.add_argument('--window-size=1600,900')
+          options.add_argument('--force-device-scale-factor=1')
+          options.add_argument('--enable-webgl')
+          options.add_argument('--ignore-gpu-blocklist')
+          options.add_argument('--enable-unsafe-swiftshader')
+          options.add_argument('--no-sandbox')
+          options.add_argument('--disable-dev-shm-usage')
+          options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
+
+          driver = webdriver.Chrome(options=options)
+          driver.set_window_size(1600, 900)
+          manifest = {'url': url, 'chapters': [], 'browserLogSevere': []}
+          try:
+              driver.get(url)
+              wait = WebDriverWait(driver, 90)
+              wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, '.story-progress .progress-dot')) == 6)
+              wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, 'canvas')) >= 1)
+              # Allow KTX2 decode, GLB upload, SMAA shader warmup and first camera settle.
+              time.sleep(8)
+
+              for index in range(6):
+                  dots = driver.find_elements(By.CSS_SELECTOR, '.story-progress .progress-dot')
+                  if len(dots) != 6:
+                      raise RuntimeError(f'Expected 6 progress dots, found {len(dots)}')
+                  driver.execute_script('arguments[0].click()', dots[index])
+                  wait.until(lambda d, i=index: d.find_elements(By.CSS_SELECTOR, '.story-progress .progress-dot')[i].get_attribute('data-active') == 'true')
+                  time.sleep(3.0 if index else 1.0)
+
+                  active = driver.find_element(By.CSS_SELECTOR, '.story-chapter[data-active="true"]')
+                  title_el = active.find_element(By.CSS_SELECTOR, 'h1, h2')
+                  title = title_el.text.strip()
+                  path = out / f'chapter-{index + 1:02d}.png'
+                  driver.save_screenshot(str(path))
+                  with Image.open(path) as image:
+                      if image.size != (1600, 900):
+                          raise RuntimeError(f'{path}: expected 1600x900, got {image.size}')
+                  copy_rect = driver.execute_script('return arguments[0].querySelector(".story-copy").getBoundingClientRect().toJSON()', active)
+                  viewport_ok = copy_rect['left'] >= 0 and copy_rect['top'] >= 0 and copy_rect['right'] <= 1600 and copy_rect['bottom'] <= 900
+                  if not viewport_ok:
+                      raise RuntimeError(f'Chapter {index+1} copy is clipped outside viewport: {copy_rect}')
+                  manifest['chapters'].append({
+                      'index': index + 1,
+                      'title': title,
+                      'file': path.name,
+                      'copyRect': copy_rect,
+                      'copyInsideViewport': viewport_ok,
+                  })
+
+              severe = [entry for entry in driver.get_log('browser') if entry.get('level') == 'SEVERE']
+              manifest['browserLogSevere'] = severe
+              # WebGL/KTX2 runtime failures are not acceptable even when the DOM remains visible.
+              fatal_terms = ('webgl', 'ktx', 'texture', 'glb', 'shader', 'context lost')
+              fatal = [entry for entry in severe if any(term in entry.get('message', '').lower() for term in fatal_terms)]
+              if fatal:
+                  raise RuntimeError('Severe browser errors related to the R6 renderer/assets: ' + json.dumps(fatal[:8]))
+          except TimeoutException as exc:
+              raise RuntimeError('Timed out waiting for the R6 production experience') from exc
+          finally:
+              (out / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+              driver.quit()
+          PY
+
+      - name: Upload six-frame visual evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: r6-production-visual-qa
+          path: visual-qa/r6
+          retention-days: 30
+          if-no-files-found: error
