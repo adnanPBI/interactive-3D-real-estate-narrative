@@ -74,7 +74,7 @@ jobs:
             ktx2-encoder@0.6.0 \
             sharp@0.34.5
 
-      - name: Reconstruct distinct LOD2 and proxy authoring inputs
+      - name: Reconstruct distinct LOD2 authoring input
         run: |
           set -euo pipefail
           mkdir -p public/models/stage3 public/models/stage2
@@ -82,18 +82,53 @@ jobs:
             cp "public/models/r5/medium/${name}.glb" "public/models/stage3/${name}.glb"
             cp "public/models/r4/${name}.glb" "public/models/stage2/${name}.glb"
           done
+          echo "The final proxy is not sourced from stage2: generate-r6-assets.py overwrites it from final LOD2."
 
       - name: Generate R6 four-LOD hero pack, headless fallbacks and KTX2 textures
         run: npm run assets:r6
 
+      - name: Re-prove deterministic headless CPU fallback
+        run: |
+          set -euo pipefail
+          python3 scripts/render-r6-fallbacks.py
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          source = Path('scripts/render-r6-fallbacks.py')
+          tree = ast.parse(source.read_text(encoding='utf-8'))
+          imported = set()
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Import):
+                  imported.update(alias.name.split('.')[0] for alias in node.names)
+              elif isinstance(node, ast.ImportFrom) and node.module:
+                  imported.add(node.module.split('.')[0])
+          forbidden = {'vtk', 'pyvista', 'OpenGL', 'moderngl', 'egl', 'osmesa', 'xlib'}
+          bad = sorted(imported & forbidden)
+          if bad:
+              raise SystemExit(f'Forbidden graphics/display imports in CPU fallback renderer: {bad}')
+          expected = {
+              'hero-campus.webp', 'integrated-campus.webp',
+              'manufacturing.webp', 'manufacturing-line.webp',
+              'power-generation.webp', 'substation-bess.webp',
+              'data-centers.webp', 'data-center-cooling.webp',
+              'recycling.webp', 'recycling-intake.webp',
+              'closing-platform.webp', 'connected-campus.webp',
+          }
+          out = Path('public/fallback/r6')
+          missing = sorted(name for name in expected if not (out / name).is_file())
+          if missing:
+              raise SystemExit(f'Missing CPU fallback frames: {missing}')
+          print('Headless CPU fallback PASS: Pillow-only imports; 12 deterministic runtime/semantic frames present.')
+          PY
+
       - name: Repair generated R6 runtime source
         run: python3 tools/repair-r6-source.py
 
-      - name: TypeScript gate
-        run: npm run typecheck
-
       - name: Genuine proxy reduction gate
         run: python3 tools/validate-r6-proxy-lods.py
+
+      - name: TypeScript gate
+        run: npm run typecheck
 
       - name: R6 corporate fidelity gate
         run: npm run validate:corporate:r6
@@ -127,7 +162,7 @@ jobs:
             scripts/generate-r6-assets.py scripts/encode-r6-ktx2.mjs \
             scripts/validate-corporate-r6.mjs scripts/validate-r6-materials.mjs scripts/validate-r6-budgets.mjs \
             scripts/render-r6-fallbacks.py \
-            tools/r6-headless-fallbacks.py tools/validate-r6-proxy-lods.py tools/repair-r6-source.py \
+            tools/r6-headless-fallbacks.py tools/reduce-r6-proxies.py tools/validate-r6-proxy-lods.py tools/repair-r6-source.py \
             tests/r6-assets.test.mjs tests/r6-runtime.test.mjs tests/r6-budgets.test.mjs \
             public/models/r6 public/textures/r6 public/fallback/r6 \
             docs/corporate/R6_HERO_FIDELITY_IMPLEMENTATION.md docs/R6_CAVEATS.md docs/R6_CLAUDE_CHERRYPICK.md R6_FINAL_HANDOFF.md \
@@ -136,7 +171,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "R6 source and assets already match main."
           else
-            git commit -m "feat(r6): hero fidelity, true proxies, KTX2 and SMAA [skip ci]"
+            git commit -m "feat(r6): materialize LOD2-derived proxies and CPU fallback [skip ci]"
             git push origin HEAD:main
           fi
 
