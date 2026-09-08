@@ -47,8 +47,6 @@ jobs:
             echo "R6 source upgrade is already materialized on main."
           fi
           python3 tools/repair-r6-source.py
-          # Replace the VTK/OpenGL fallback renderer with the deterministic
-          # Pillow renderer so `npm run assets:r6` remains headless-CI safe.
           cp tools/r6-headless-fallbacks.py scripts/render-r6-fallbacks.py
 
       - uses: actions/setup-node@v4
@@ -58,9 +56,6 @@ jobs:
 
       - name: Install exact application dependencies
         run: npm ci
-
-      - name: Early TypeScript gate
-        run: npm run typecheck
 
       - uses: actions/setup-python@v5
         with:
@@ -84,14 +79,18 @@ jobs:
           set -euo pipefail
           mkdir -p public/models/stage3 public/models/stage2
           for name in hero-campus manufacturing power-generation data-centers recycling closing-platform; do
-            # LOD2 source: newer R5 medium asset.
             cp "public/models/r5/medium/${name}.glb" "public/models/stage3/${name}.glb"
-            # Proxy source: materially lighter R4 asset, never an alias/copy of LOD2.
             cp "public/models/r4/${name}.glb" "public/models/stage2/${name}.glb"
           done
 
       - name: Generate R6 four-LOD hero pack, headless fallbacks and KTX2 textures
         run: npm run assets:r6
+
+      - name: Repair generated R6 runtime source
+        run: python3 tools/repair-r6-source.py
+
+      - name: TypeScript gate
+        run: npm run typecheck
 
       - name: Genuine proxy reduction gate
         run: python3 tools/validate-r6-proxy-lods.py
