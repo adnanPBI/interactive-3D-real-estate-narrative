@@ -13,8 +13,10 @@ on:
       - "lib/**"
       - "assets-source/r6/**"
       - "scripts/**"
+      - "tools/r6-*.py"
       - "tests/r6-*.test.mjs"
       - "public/fallback/r6/**"
+      - "public/textures/r6/**"
       - "requirements-assets.txt"
       - "next.config.ts"
       - "package.json"
@@ -44,6 +46,9 @@ jobs:
           else
             echo "R6 source upgrade is already materialized on main."
           fi
+          # Replace the VTK/OpenGL fallback renderer with the deterministic
+          # Pillow renderer so `npm run assets:r6` remains headless-CI safe.
+          cp tools/r6-headless-fallbacks.py scripts/render-r6-fallbacks.py
 
       - uses: actions/setup-node@v4
         with:
@@ -70,17 +75,22 @@ jobs:
             ktx2-encoder@0.6.0 \
             sharp@0.34.5
 
-      - name: Reconstruct legacy low-LOD authoring inputs
+      - name: Reconstruct distinct LOD2 and proxy authoring inputs
         run: |
           set -euo pipefail
           mkdir -p public/models/stage3 public/models/stage2
           for name in hero-campus manufacturing power-generation data-centers recycling closing-platform; do
+            # LOD2 source: newer R5 medium asset.
             cp "public/models/r5/medium/${name}.glb" "public/models/stage3/${name}.glb"
-            cp "public/models/r5/medium/${name}.glb" "public/models/stage2/${name}.glb"
+            # Proxy source: materially lighter R4 asset, never an alias/copy of LOD2.
+            cp "public/models/r4/${name}.glb" "public/models/stage2/${name}.glb"
           done
 
-      - name: Generate R6 four-LOD hero pack and KTX2 textures
+      - name: Generate R6 four-LOD hero pack, headless fallbacks and KTX2 textures
         run: npm run assets:r6
+
+      - name: Genuine proxy reduction gate
+        run: python3 tools/validate-r6-proxy-lods.py
 
       - name: TypeScript gate
         run: npm run typecheck
@@ -117,15 +127,16 @@ jobs:
             scripts/generate-r6-assets.py scripts/encode-r6-ktx2.mjs \
             scripts/validate-corporate-r6.mjs scripts/validate-r6-materials.mjs scripts/validate-r6-budgets.mjs \
             scripts/render-r6-fallbacks.py \
+            tools/r6-headless-fallbacks.py tools/validate-r6-proxy-lods.py \
             tests/r6-assets.test.mjs tests/r6-runtime.test.mjs tests/r6-budgets.test.mjs \
-            public/models/r6 public/fallback/r6 \
+            public/models/r6 public/textures/r6 public/fallback/r6 \
             docs/corporate/R6_HERO_FIDELITY_IMPLEMENTATION.md docs/R6_CAVEATS.md docs/R6_CLAUDE_CHERRYPICK.md R6_FINAL_HANDOFF.md \
             .github/workflows/vercel-r4-deploy.yml
           git add -u scripts
           if git diff --cached --quiet; then
             echo "R6 source and assets already match main."
           else
-            git commit -m "feat(r6): hero fidelity, four LODs, KTX2 and SMAA [skip ci]"
+            git commit -m "feat(r6): hero fidelity, true proxies, KTX2 and SMAA [skip ci]"
             git push origin HEAD:main
           fi
 
