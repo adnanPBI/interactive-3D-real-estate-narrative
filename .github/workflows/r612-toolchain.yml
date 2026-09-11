@@ -1,0 +1,67 @@
+name: R6.1.2 isolated public toolchain retrieval
+on:
+  push:
+    branches: ["build/r612-toolchain-20260911"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  toolchain:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 24081acd8951d0368b50cca272f41e8eb341fcec
+          path: dependency-source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Collect exact public dependency cache
+        working-directory: dependency-source
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/r612-toolchain/npm-cache"
+          npm install -g npm@10.9.2
+          npm ci --no-audit --no-fund --cache "$RUNNER_TEMP/r612-toolchain/npm-cache"
+          cp package.json package-lock.json "$RUNNER_TEMP/r612-toolchain/"
+          node --version > "$RUNNER_TEMP/r612-toolchain/node-version.txt"
+          npm --version > "$RUNNER_TEMP/r612-toolchain/npm-version.txt"
+          sha256sum package.json package-lock.json > "$RUNNER_TEMP/r612-toolchain/dependency-source-sha256.txt"
+      - name: Obtain and verify pinned Khronos KTX Software
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/r612-toolchain"
+          NAME=KTX-Software-4.4.2-Linux-x86_64.tar.bz2
+          BASE=https://github.com/KhronosGroup/KTX-Software/releases/download/v4.4.2
+          mkdir -p "$BUNDLE/ktx"
+          cd "$BUNDLE/ktx"
+          curl -fL --retry 2 --connect-timeout 20 --max-time 180 "$BASE/$NAME" -o "$NAME"
+          curl -fL --retry 2 --connect-timeout 20 --max-time 60 "$BASE/$NAME.sha1" -o "$NAME.sha1"
+          EXPECTED=$(awk 'NF {print $1; exit}' "$NAME.sha1")
+          test "$(sha1sum "$NAME" | cut -d' ' -f1)" = "$EXPECTED"
+          sha256sum "$NAME" > archive.sha256
+          mkdir tools
+          tar -xjf "$NAME" -C tools --strip-components=1
+          tools/bin/toktx --version > version.txt 2>&1
+      - name: Obtain real Playwright Chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/r612-toolchain/browsers
+        run: |
+          set -euo pipefail
+          python -m pip install playwright==1.57.0
+          python -m playwright install chromium
+      - name: Archive public toolchain, never deployment credentials
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r612-public-toolchain
+          path: ${{ runner.temp }}/r612-toolchain
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 6
