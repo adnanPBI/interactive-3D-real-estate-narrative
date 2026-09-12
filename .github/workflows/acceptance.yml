@@ -1,4 +1,4 @@
-name: Stage 6 CI and diagnostic acceptance
+name: R6.1.2 CI and diagnostic acceptance
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ on:
 jobs:
   static-and-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       DEPLOYMENT_TIER: staging
       BUILD_ID: ${{ github.sha }}
@@ -22,16 +22,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Require reviewed lockfile
         run: node scripts/check-lockfile.mjs
       - run: npm ci --no-audit --no-fund
-      - run: npm run validate:stage1
-      - run: npm run validate:stage2
-      - run: npm run validate:stage3
-      - run: npm run validate:stage4
-      - run: npm run validate:stage5
-      - run: npm run validate:stage6
-      - run: npm run qa:content
+      - name: Install deterministic asset validation dependencies
+        run: pip install -r requirements-assets.txt
+      - name: Validate R6 corporate asset contract
+        run: npm run validate:corporate:r6
+      - name: Run R6 regression tests
+        run: npm test
+      - name: Prove genuine LOD2 to proxy provenance
+        run: npm run validate:r6:proxy
+      - name: Re-prove deterministic CPU fallback generation
+        run: npm run prove:r6:cpu-fallback
       - run: npm run typecheck
       - run: npm run build
       - name: Save build evidence marker
@@ -40,8 +46,10 @@ jobs:
           printf 'commit=%s\nnode=%s\ncompleted=%s\n' "$GITHUB_SHA" "$(node --version)" "$(date -u +%FT%TZ)" > artifacts/build/next-build.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: stage6-build-evidence
-          path: artifacts/build/next-build.txt
+          name: r612-build-evidence
+          path: |
+            artifacts/build/next-build.txt
+            artifacts/r6-cpu-fallback-proof.json
 
   browser-acceptance:
     needs: static-and-build
@@ -66,19 +74,23 @@ jobs:
           python-version: '3.12'
       - run: npm ci --no-audit --no-fund
       - run: pip install -r requirements-acceptance.txt
-      - run: playwright install --with-deps chromium firefox webkit
+      - run: playwright install --with-deps chromium
       - run: npm run build
       - name: Start app and sink webhook
         run: |
-          node -e "require('http').createServer((req,res)=>{let b='';req.on('data',d=>b+=d);req.on('end',()=>{res.writeHead(204);res.end()})}).listen(8787,'127.0.0.1')" > /tmp/webhook.log 2>&1 &
+          node -e "require('http').createServer((req,res)=>{req.resume();req.on('end',()=>{res.writeHead(204);res.end()})}).listen(8787,'127.0.0.1')" > /tmp/webhook.log 2>&1 &
           npm start > /tmp/app.log 2>&1 &
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:3000/api/health >/dev/null && exit 0; sleep 1; done
           cat /tmp/app.log
           exit 1
-      - name: Browser acceptance (diagnostic FPS in CI)
+      - name: Six-chapter browser acceptance
         run: python3 scripts/acceptance_qa.py --url http://127.0.0.1:3000 --out artifacts/acceptance --no-fps-gate
+      - name: Runtime WebGL failure fallback proof
+        run: python3 scripts/acceptance_qa.py --url http://127.0.0.1:3000 --webgl-fallback-proof-only --out artifacts/webgl-fallback
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: stage6-browser-acceptance
-          path: artifacts/acceptance
+          name: r612-browser-acceptance
+          path: |
+            artifacts/acceptance
+            artifacts/webgl-fallback
