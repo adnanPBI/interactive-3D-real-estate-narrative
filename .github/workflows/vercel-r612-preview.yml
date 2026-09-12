@@ -24,7 +24,15 @@ jobs:
           cache: npm
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          # The reviewed/canonical R6.1.2 source was authored under Python 3.11.
+          # GLB serialization is byte-sensitive, so do not silently move this to 3.12+.
+          python-version: '3.11'
+
+      - name: Runtime version diagnostics
+        run: |
+          node --version
+          npm --version
+          python --version
 
       - name: Install exact JavaScript dependencies
         run: npm ci --no-audit --no-fund
@@ -81,6 +89,19 @@ jobs:
           STATUS=$(curl -sS -o /tmp/vercel-user.json -w '%{http_code}' -H "Authorization: Bearer ${VERCEL_TOKEN}" https://api.vercel.com/v2/user)
           echo "Vercel /v2/user HTTP status: ${STATUS}"
           test "$STATUS" = "200"
+
+      - name: Normalize Vercel project runtime
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -fsS -X PATCH \
+            "https://api.vercel.com/v9/projects/interactive-3d-real-estate-narrative-r4?teamId=team_GI0H1MJPmSQhzRXjQ1DMbK27" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"nodeVersion":"22.x","autoAssignCustomDomains":true}')
+          printf '%s' "$RESPONSE" > /tmp/vercel-project-update.json
+          node -e 'const p=JSON.parse(require("fs").readFileSync("/tmp/vercel-project-update.json","utf8")); if(p.nodeVersion!=="22.x") throw new Error(`Vercel nodeVersion=${p.nodeVersion}`); console.log(`Vercel project runtime=${p.nodeVersion}`)'
 
       - name: Link existing Vercel project
         env:
