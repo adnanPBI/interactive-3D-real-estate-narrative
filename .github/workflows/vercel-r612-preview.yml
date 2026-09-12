@@ -3,8 +3,6 @@ name: R6.1.2 Vercel Preview
 on:
   push:
     branches: ["r612-codex-remediation"]
-    paths:
-      - '.github/workflows/vercel-r612-preview.yml'
   workflow_dispatch:
 
 permissions:
@@ -51,6 +49,12 @@ jobs:
 
       - name: Generate R6 runtime assets from authoritative source
         run: npm run assets:r6
+
+      - name: Assert all six R6 heroes and LODs exist
+        env:
+          VERCEL: "1"
+          NEXT_PUBLIC_3D_ASSET_SET: "r6"
+        run: node scripts/assert-r6-runtime-assets.mjs
 
       - name: R6.1.2 generated-asset gates
         run: |
@@ -102,6 +106,8 @@ jobs:
           set -euo pipefail
           curl -fsS --retry 12 --retry-delay 5 "$DEPLOY_URL/" >/dev/null
           curl -fsS --retry 12 --retry-delay 5 "$DEPLOY_URL/api/health" >/dev/null
+          curl -fsSI --retry 12 --retry-delay 5 "$DEPLOY_URL/models/r6/hero/integrated-campus/lod0.glb" | grep -E '^HTTP/.* 200'
+          curl -fsSI --retry 12 --retry-delay 5 "$DEPLOY_URL/models/r6/hero/manufacturing-line/lod0.glb" | grep -E '^HTTP/.* 200'
 
       - name: Upload deployment evidence
         if: always()
