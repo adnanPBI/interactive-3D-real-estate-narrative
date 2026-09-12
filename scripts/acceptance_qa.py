@@ -2,8 +2,8 @@
 """Browser acceptance harness for the six-chapter R6 experience.
 
 Supports CI diagnostic mode, explicit WebGL-failure fallback proof, and ordered
-six-chapter evidence capture. It intentionally treats FPS as diagnostic unless
-an external physical-laptop gate is requested elsewhere.
+six-chapter evidence capture. FPS is diagnostic here; physical-laptop sign-off
+remains a separate release-evidence gate.
 """
 from __future__ import annotations
 
@@ -30,14 +30,17 @@ def semantic_snapshot(page, chapter: str) -> dict[str, object]:
     return page.evaluate(
         """chapter => {
           const active = document.querySelector('.story-chapter[data-active="true"]');
-          const fallback = document.querySelector('.experience-fallback--r6');
-          const canvas = document.querySelector('canvas');
+          const fallback = document.querySelector('[data-r6-static-fallback="true"]');
+          const canvases = [...document.querySelectorAll('canvas')];
+          const immersive = canvases.filter((canvas) => canvas.closest('.experience-canvas, .experience-shell'));
           return {
             requested: chapter,
             activeId: active?.id || null,
             activeHeading: active?.querySelector('h1,h2')?.textContent?.trim() || null,
             fallbackVisible: !!fallback,
-            canvasPresent: !!canvas,
+            experienceCanvasCount: canvases.length,
+            immersiveCanvasCount: immersive.length,
+            webglProbeAttempts: window.__R6_WEBGL_PROBE_ATTEMPTS__ || 0,
             readyState: document.readyState,
           };
         }""",
@@ -55,6 +58,7 @@ def wait_for_story(page) -> None:
 def run_fallback_proof(page, base_url: str, out: Path) -> dict[str, object]:
     page.add_init_script(
         """() => {
+          window.__R6_WEBGL_PROBE_ATTEMPTS__ = 0;
           const original = HTMLCanvasElement.prototype.getContext;
           HTMLCanvasElement.prototype.getContext = function(type, ...args) {
             if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') return null;
@@ -62,18 +66,32 @@ def run_fallback_proof(page, base_url: str, out: Path) -> dict[str, object]:
           };
         }"""
     )
-    page.goto(with_query(base_url, qa="1"), wait_until="domcontentloaded", timeout=30000)
+    # Deliberately request high quality. WebGL safety must win over this override.
+    page.goto(with_query(base_url, qa="1", quality="high"), wait_until="domcontentloaded", timeout=30000)
     wait_for_story(page)
     try:
-        page.wait_for_selector('.experience-fallback--r6', state='attached', timeout=15000)
+        page.wait_for_selector('[data-r6-static-fallback="true"]', state='attached', timeout=15000)
     except PlaywrightTimeoutError as exc:
         raise RuntimeError("WebGL failure did not recover to the R6 static fallback") from exc
     snap = semantic_snapshot(page, "hero")
     if not snap["fallbackVisible"]:
         raise RuntimeError("fallback proof selector exists but semantic snapshot is not in fallback mode")
+    if int(snap["webglProbeAttempts"]) < 1:
+        raise RuntimeError("forced WebGL-unavailable proof did not execute the client probe")
+    forcedQualityOverride = True
+    if int(snap["immersiveCanvasCount"]) != 0:
+        raise RuntimeError("forced WebGL failure still mounted an immersive canvas")
     screenshot = out / "webgl-fallback.png"
     page.screenshot(path=str(screenshot), full_page=True)
-    return {"pass": True, "screenshot": screenshot.name, "semantic": snap}
+    return {
+        "pass": True,
+        "forcedQualityOverride": forcedQualityOverride,
+        "experienceCanvasCount": snap["experienceCanvasCount"],
+        "immersiveCanvasCount": snap["immersiveCanvasCount"],
+        "webglProbeAttempts": snap["webglProbeAttempts"],
+        "screenshot": screenshot.name,
+        "semantic": snap,
+    }
 
 
 def run_six_chapter(page, base_url: str, out: Path) -> list[dict[str, object]]:
@@ -106,14 +124,14 @@ def run_six_chapter(page, base_url: str, out: Path) -> list[dict[str, object]]:
 def collect_frame_deltas(page, seconds: float = 2.5) -> dict[str, object]:
     deltas = page.evaluate(
         """seconds => new Promise(resolve => {
-          const values = [];
+          const deltas = [];
           let previous = performance.now();
           const end = previous + seconds * 1000;
           function tick(now) {
             const delta = now - previous;
             previous = now;
-            if (delta > 0) values.push(delta);
-            if (now >= end) resolve(values); else requestAnimationFrame(tick);
+            if (delta > 0) deltas.push(delta);
+            if (now >= end) resolve(deltas); else requestAnimationFrame(tick);
           }
           requestAnimationFrame(tick);
         })""",
