@@ -1,6 +1,7 @@
 name: Materialize verified R6.1.2 source v2
 
 on:
+  workflow_dispatch:
   push:
     branches: [r612-codex-remediation]
     paths:
@@ -12,12 +13,14 @@ permissions:
 jobs:
   materialize:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - uses: actions/setup-python@v5
         with:
+          # Preserve the exact authoring runtime used by the reviewed source package.
           python-version: '3.11'
       - name: Install deterministic authoring dependencies
         run: python -m pip install --disable-pip-version-check trimesh==4.11.1 numpy==2.3.5 Pillow==12.3.0
@@ -26,14 +29,16 @@ jobs:
         run: |
           set -euo pipefail
           awk '/^H4sI/{capture=1} capture && /^B64$/{exit} capture{print}' .github/workflows/materialize-r612-source.yml > /tmp/author-r61.py.gz.b64
+          test -s /tmp/author-r61.py.gz.b64
           base64 -d /tmp/author-r61.py.gz.b64 | gunzip > scripts/author-r61-manufacturing-source.py
           chmod 755 scripts/author-r61-manufacturing-source.py
           rm -rf assets-source/r6/heroes/manufacturing-line
           python scripts/author-r61-manufacturing-source.py
           ACTUAL_SHA=$(sha256sum assets-source/r6/heroes/manufacturing-line/visual-master.glb | awk '{print $1}')
+          echo "Manufacturing visual-master SHA256=$ACTUAL_SHA"
           test "$ACTUAL_SHA" = "896f4a4c4d1fca72d36b6e76f5c44d74d1b59338f4b5374a25295665af1b4d8e"
           python scripts/validate-r61-source.py
-      - name: Commit canonical source and remove bootstrap workflows
+      - name: Commit canonical source and remove one-time bootstrap workflows
         shell: bash
         run: |
           set -euo pipefail
