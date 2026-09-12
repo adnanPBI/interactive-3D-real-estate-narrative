@@ -71,8 +71,6 @@ export function HomeExperience() {
     return () => window.removeEventListener("convalt:webgl-fatal", fail);
   }, []);
 
-  // The immersive home is a fixed story stage. Navigation to 2D pages exits
-  // this component and restores normal document scrolling.
   useEffect(() => {
     const previousBodyOverflow = document.body.style.overflow;
     const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -85,7 +83,6 @@ export function HomeExperience() {
     };
   }, []);
 
-  // Suspend continuous rendering when the tab is backgrounded.
   useEffect(() => {
     const publish = () => setCanvasActive(document.visibilityState === "visible");
     publish();
@@ -93,16 +90,11 @@ export function HomeExperience() {
     return () => document.removeEventListener("visibilitychange", publish);
   }, []);
 
-  // QA instrumentation remains entirely opt-in and is absent from the normal
-  // client viewport/DOM unless the explicit query flag is present.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setShowBenchmark(params.get("benchmark") === "1" || params.get("qa") === "1");
   }, []);
 
-  // Tell the branded preloader that the first visual state is usable. The R3F
-  // canvas has already been rendering behind the gate, so initial shaders get a
-  // short warm-up window before the overlay leaves.
   useEffect(() => {
     if (quality !== "fallback" && !canvasReady) return;
     const delay = quality === "fallback" ? 100 : 360;
@@ -149,8 +141,6 @@ export function HomeExperience() {
     });
   }, [quality, runtimeFallback, setActiveChapter, setTargetProgress, setTimelineProgress]);
 
-  // Wheel / touch / keyboard input are interpreted as chapter intent, not as
-  // physical page scrolling. This is the primary SOW interaction model.
   useEffect(() => {
     const handleWheel = (event: WheelEvent) => {
       if (isInteractiveTarget(event.target)) return;
@@ -202,7 +192,7 @@ export function HomeExperience() {
         goToChapter(0);
       } else if (event.key === "End") {
         event.preventDefault();
-        goToChapter(AST_CHAPTER);
+        goToChapter(LAST_CHAPTER);
       }
     };
 
@@ -220,7 +210,6 @@ export function HomeExperience() {
     };
   }, [goToChapter]);
 
-  // One restrained text reveal per chapter; no card choreography or stacked HUDs.
   useEffect(() => {
     if (quality === "fallback" || document.documentElement.dataset.motion === "reduced") return;
     const element = copyRefs.current[activeChapter];
