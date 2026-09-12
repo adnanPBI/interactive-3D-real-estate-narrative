@@ -1,207 +1,171 @@
-name: Deploy R6 Hero Fidelity to Vercel
+name: Deploy R6.1 Manufacturing Fidelity to Vercel
 
 on:
   push:
     branches: ["main"]
     paths:
       - ".github/workflows/vercel-r4-deploy.yml"
-      - ".gitignore"
       - "app/**"
       - "components/**"
-      - "content/**"
       - "experience/**"
       - "lib/**"
-      - "assets-source/r6/**"
-      - "scripts/**"
-      - "tools/*.py"
-      - "tests/r6-*.test.mjs"
-      - "public/fallback/r6/**"
+      - "public/models/r6/**"
       - "public/textures/r6/**"
-      - "requirements-assets.txt"
-      - "next.config.ts"
+      - "public/fallback/r6/**"
+      - "scripts/generate-r6-assets.py"
+      - "scripts/build-r61-assets.py"
+      - "scripts/author-r61-manufacturing-source.py"
+      - "scripts/encode-r61-textures.py"
+      - "scripts/install-ktx-tools.sh"
+      - "scripts/validate-r61-source.py"
+      - "scripts/validate-r61-textures.py"
+      - "assets-source/r6/heroes/**"
+      - "scripts/validate-corporate-r6.mjs"
+      - "scripts/validate-r6-proxy-provenance.py"
+      - "scripts/prove-r6-cpu-fallback.py"
+      - "scripts/acceptance_qa.py"
+      - "requirements-acceptance.txt"
+      - "tests/r6-assets.test.mjs"
+      - "tests/r6-runtime-contract.test.mjs"
+      - "tests/r612-rendering-contract.test.mjs"
       - "package.json"
       - "package-lock.json"
       - "tsconfig.json"
+      - "deployment/**"
+      - "content/**"
+      - "artifacts/production/*.example.json"
+      - "scripts/check-client-approval.mjs"
+      - "scripts/verify-production-provenance.mjs"
+      - "scripts/check-operations-ownership.mjs"
+      - "scripts/cutover-preflight.mjs"
+      - "scripts/production_smoke.py"
+      - "scripts/verify-r612-release-integrity.mjs"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Apply and repair one-time R6 source upgrade
-        run: |
-          set -euo pipefail
-          if compgen -G "scripts/r6-source.patch.gz.b64.part-*" > /dev/null; then
-            cat scripts/r6-source.patch.gz.b64.part-* | base64 --decode | gzip --decompress > /tmp/r6-source.patch
-            git apply --check --exclude=.github/workflows/vercel-r4-deploy.yml /tmp/r6-source.patch
-            git apply --exclude=.github/workflows/vercel-r4-deploy.yml /tmp/r6-source.patch
-            rm scripts/r6-source.patch.gz.b64.part-*
-          else
-            echo "R6 source upgrade is already materialized on main."
-          fi
-          python3 tools/repair-r6-source.py
-          cp tools/r6-headless-fallbacks.py scripts/render-r6-fallbacks.py
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
-      - name: Install exact application dependencies
-        run: npm ci
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: requirements-assets.txt
-
-      - name: Install asset-authoring dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements-assets.txt
-
-      - name: Install temporary KTX2 authoring tools
+          cache-dependency-path: |
+            requirements-assets.txt
+            requirements-acceptance.txt
+      - name: Install exact Node dependencies
+        run: npm ci
+      - name: Install asset and acceptance validation dependencies
         run: |
-          npm install --no-save --package-lock=false --ignore-scripts \
-            @gltf-transform/core@4.2.1 \
-            @gltf-transform/extensions@4.2.1 \
-            ktx2-encoder@0.6.0 \
-            sharp@0.34.5
-
-      - name: Reconstruct distinct LOD2 authoring input
+          python -m pip install --disable-pip-version-check -r requirements-assets.txt
+          python -m pip install --disable-pip-version-check -r requirements-acceptance.txt
+      - name: Validate pipeline-authoritative Manufacturing visual master
+        run: npm run validate:r61:source
+      - name: Install pinned Khronos KTX encoder
         run: |
-          set -euo pipefail
-          mkdir -p public/models/stage3 public/models/stage2
-          for name in hero-campus manufacturing power-generation data-centers recycling closing-platform; do
-            cp "public/models/r5/medium/${name}.glb" "public/models/stage3/${name}.glb"
-            cp "public/models/r4/${name}.glb" "public/models/stage2/${name}.glb"
-          done
-          echo "The final proxy is not sourced from stage2: generate-r6-assets.py overwrites it from final LOD2."
-
-      - name: Generate R6 four-LOD hero pack, headless fallbacks and KTX2 textures
-        run: npm run assets:r6
-
-      - name: Re-prove deterministic headless CPU fallback
-        run: |
-          set -euo pipefail
-          python3 scripts/render-r6-fallbacks.py
-          python3 - <<'PY'
-          import ast
-          from pathlib import Path
-          source = Path('scripts/render-r6-fallbacks.py')
-          tree = ast.parse(source.read_text(encoding='utf-8'))
-          imported = set()
-          for node in ast.walk(tree):
-              if isinstance(node, ast.Import):
-                  imported.update(alias.name.split('.')[0] for alias in node.names)
-              elif isinstance(node, ast.ImportFrom) and node.module:
-                  imported.add(node.module.split('.')[0])
-          forbidden = {'vtk', 'pyvista', 'OpenGL', 'moderngl', 'egl', 'osmesa', 'xlib'}
-          bad = sorted(imported & forbidden)
-          if bad:
-              raise SystemExit(f'Forbidden graphics/display imports in CPU fallback renderer: {bad}')
-          expected = {
-              'hero-campus.webp', 'integrated-campus.webp',
-              'manufacturing.webp', 'manufacturing-line.webp',
-              'power-generation.webp', 'substation-bess.webp',
-              'data-centers.webp', 'data-center-cooling.webp',
-              'recycling.webp', 'recycling-intake.webp',
-              'closing-platform.webp', 'connected-campus.webp',
-          }
-          out = Path('public/fallback/r6')
-          missing = sorted(name for name in expected if not (out / name).is_file())
-          if missing:
-              raise SystemExit(f'Missing CPU fallback frames: {missing}')
-          print('Headless CPU fallback PASS: Pillow-only imports; 12 deterministic runtime/semantic frames present.')
-          PY
-
-      - name: Repair generated R6 runtime source
-        run: python3 tools/repair-r6-source.py
-
-      - name: Genuine proxy reduction gate
-        run: python3 tools/validate-r6-proxy-lods.py
-
+          TOKTX_PATH=$(scripts/install-ktx-tools.sh)
+          echo "TOKTX=$TOKTX_PATH" >> "$GITHUB_ENV"
+      - name: Build R6.1 assets with release Basis KTX2
+        run: npm run assets:r6:release
+      - name: R6.1 Basis KTX2 and mip-chain release gate
+        run: npm run validate:r61:textures:release
+      - name: Preserve and re-prove canonical CPU fallback renderer
+        run: npm run prove:r6:cpu-fallback
+      - name: R6 final-LOD2 proxy provenance and bounds gate
+        run: npm run validate:r6:proxy
+      - name: R6.1 structural, fidelity and budget gate
+        env:
+          R61_REQUIRE_BASIS: "1"
+        run: npm run validate:corporate:r6
+      - name: R6 focused structural/runtime-contract tests
+        run: node --test tests/r6-assets.test.mjs tests/r6-runtime-contract.test.mjs tests/r612-rendering-contract.test.mjs
       - name: TypeScript gate
         run: npm run typecheck
-
-      - name: R6 corporate fidelity gate
-        run: npm run validate:corporate:r6
-
-      - name: R6 material and SMAA gate
-        run: npm run validate:r6:materials
-
-      - name: R6 active-scene budget gate
-        run: npm run validate:r6:budgets
-
-      - name: R6 focused tests
-        run: npm run qa:r6
-
       - name: Production build gate
         env:
           VERCEL: "1"
+          NEXT_PUBLIC_3D_ASSET_SET: "r6"
         run: npm run build
-
-      - name: Persist R6 source and generated runtime assets to main
+      - name: Install Chromium for production-runtime acceptance
+        run: python -m playwright install --with-deps chromium
+      - name: Runtime WebGL fallback and six-chapter regression gates
+        env:
+          NEXT_PUBLIC_3D_ASSET_SET: "r6"
+          R6_REFERENCE_URL: ${{ vars.R6_REFERENCE_URL }}
         run: |
           set -euo pipefail
-          rm -rf scripts/__pycache__ assets-source/r6/authoring/__pycache__ .r6-raw public/models/stage3 public/models/stage2
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            .gitignore package.json package-lock.json requirements-assets.txt \
-            components/experience \
-            experience/config experience/systems \
-            lib/experienceStore.ts types/qa.d.ts app/globals.css \
-            assets-source/r6 \
-            scripts/generate-r6-assets.py scripts/encode-r6-ktx2.mjs \
-            scripts/validate-corporate-r6.mjs scripts/validate-r6-materials.mjs scripts/validate-r6-budgets.mjs \
-            scripts/render-r6-fallbacks.py \
-            tools/r6-headless-fallbacks.py tools/reduce-r6-proxies.py tools/validate-r6-proxy-lods.py tools/repair-r6-source.py \
-            tests/r6-assets.test.mjs tests/r6-runtime.test.mjs tests/r6-budgets.test.mjs \
-            public/models/r6 public/textures/r6 public/fallback/r6 \
-            docs/corporate/R6_HERO_FIDELITY_IMPLEMENTATION.md docs/R6_CAVEATS.md docs/R6_CLAUDE_CHERRYPICK.md R6_FINAL_HANDOFF.md \
-            .github/workflows/vercel-r4-deploy.yml
-          git add -u scripts
-          if git diff --cached --quiet; then
-            echo "R6 source and assets already match main."
-          else
-            git commit -m "feat(r6): materialize LOD2-derived proxies and CPU fallback [skip ci]"
-            git push origin HEAD:main
-          fi
-
+          npm run start -- -p 3000 > /tmp/r6-next.log 2>&1 &
+          APP_PID=$!
+          trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then break; fi
+            if ! kill -0 "$APP_PID" 2>/dev/null; then cat /tmp/r6-next.log; exit 5; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/api/health >/dev/null || { cat /tmp/r6-next.log; exit 6; }
+          npm run qa:r6:fallback-runtime
+          npm run qa:r6:six-chapter
+          kill "$APP_PID"
+          wait "$APP_PID" 2>/dev/null || true
+          trap - EXIT
+      - name: Upload pre-deploy R6 browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r6-predeploy-runtime-and-six-chapter-evidence
+          path: |
+            artifacts/r6-cpu-fallback-proof.json
+            artifacts/r6-webgl-fallback
+            artifacts/r6-six-chapter
+          if-no-files-found: error
+      - name: Verify release integrity and evidence templates
+        run: node scripts/verify-r612-release-integrity.mjs
+      - name: Verify deterministic geometry/source assets are committed
+        run: |
+          git diff --exit-code -- public/models/r6 public/fallback/r6 assets-source/r6
+      - name: Require explicit Manufacturing visual approval before production promotion
+        run: npm run validate:r61:source:release
+      - name: Require connected approval / provenance / operations / benchmark / visual-review gates
+        run: |
+          npm run approval:check
+          npm run validate:stage6
+          npm run operations:check
+          npm run release:provenance
+          node scripts/verify-r612-manual-evidence.mjs
       - name: Verify Vercel token
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          set -euo pipefail
           test -n "${VERCEL_TOKEN:-}" || { echo "::error::VERCEL_TOKEN is not configured"; exit 2; }
           STATUS=$(curl -sS -o /tmp/vercel-user.json -w '%{http_code}' -H "Authorization: Bearer ${VERCEL_TOKEN}" https://api.vercel.com/v2/user)
           echo "Vercel /v2/user HTTP status: ${STATUS}"
           test "$STATUS" = "200"
-
       - name: Link and deploy production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          set -euo pipefail
-          npx vercel@latest link --yes \
-            --project interactive-3d-real-estate-narrative-r4 \
-            --scope adnans-projects-1993fd6c \
-            --token "$VERCEL_TOKEN"
-          npx vercel@latest deploy --prod --yes \
-            --scope adnans-projects-1993fd6c \
-            --token "$VERCEL_TOKEN" 2>&1 | tee vercel-deploy.log
-
+          npx vercel@latest link --yes --project interactive-3d-real-estate-narrative-r4 --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN"
+          DEPLOY_URL=$(npx vercel@latest deploy --prod --yes --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN" 2>&1 | tee vercel-deploy.log | tail -n 1)
+          echo "DEPLOY_URL=$DEPLOY_URL" >> "$GITHUB_ENV"
+      - name: Post-deployment production smoke and six-chapter regression
+        env:
+          ENABLE_PRODUCTION_CONTACT_SMOKE: "0"
+        run: |
+          test -n "${DEPLOY_URL:-}"
+          python3 scripts/production_smoke.py --url "$DEPLOY_URL" --out artifacts/production-smoke
+          python3 scripts/acceptance_qa.py --url "$DEPLOY_URL" --six-chapter-proof-only --out artifacts/postdeploy-six-chapter
       - name: Upload deployment log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vercel-r6-hero-fidelity-deploy-log
+          name: vercel-r61-manufacturing-fidelity-deploy-log
           path: vercel-deploy.log
           if-no-files-found: ignore

@@ -1,0 +1,30 @@
+name: Apply R6.1.2 large-file remediation
+on:
+  push:
+    branches: [r612-codex-remediation]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[large-file-remediation]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: r612-codex-remediation
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply exact acceptance/CSS patch
+        run: python3 scripts/apply-r612-large-file-remediation.py
+      - name: Commit patched files and remove one-shot machinery
+        run: |
+          set -euo pipefail
+          rm scripts/apply-r612-large-file-remediation.py
+          rm .github/workflows/apply-r612-large-files.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/acceptance_qa.py app/globals.css scripts/apply-r612-large-file-remediation.py .github/workflows/apply-r612-large-files.yml
+          git diff --cached --check
+          git commit -m 'fix(r612): apply large-file remediation [large-file-remediation]'
+          git push origin HEAD:r612-codex-remediation

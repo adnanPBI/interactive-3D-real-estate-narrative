@@ -1,40 +1,45 @@
 "use client";
 
+import { r6ChapterHero } from "@/experience/config/r6Assets";
 import { sceneDefinitions } from "@/experience/config/scenes";
 import { useExperienceStore } from "@/lib/experienceStore";
+import { assetManager } from "@/experience/systems/AssetManager";
+import { r6HeroUrl } from "@/experience/config/r6Assets";
+import { useThree } from "@react-three/fiber";
+import { useEffect, useState } from "react";
 import { AssetPreloader } from "./AssetPreloader";
 import { CinematicCameraRig } from "./CinematicCameraRig";
 import { CinematicSky } from "./CinematicSky";
-import { EnergyField } from "./EnergyField";
 import { EnvironmentProbe } from "./EnvironmentProbe";
-import { SceneAsset } from "./SceneAsset";
+import { HeroAsset } from "./HeroAsset";
 
-/**
- * Cinematic-minimal scene composition.
- *
- * R5 preserves the previous procedural micro-detail layer while selecting a richer hero tier per device. Realism is
- * authored in optimized GLBs, not rebuilt at runtime from hundreds of decorative
- * primitives. Only the current and next scene are mounted around the transition.
- */
 export function StoryWorld({ quality, onFirstSceneReady }: { quality: "high" | "medium"; onFirstSceneReady?: () => void }) {
-  const from = useExperienceStore((state) => state.renderFrom);
-  const to = Math.min(sceneDefinitions.length - 1, from + 1);
+  const activeChapter = useExperienceStore((state) => state.activeChapter);
+  const renderer = useThree((state) => state.gl);
+  const lod = quality === "high" ? "lod0" : "lod1";
+  const [renderedChapter, setRenderedChapter] = useState(activeChapter);
+  useEffect(() => () => assetManager.disposeRenderer(renderer), [renderer]);
+  useEffect(() => {
+    let alive = true;
+    const hero = r6ChapterHero[activeChapter];
+    const url = r6HeroUrl(hero, lod);
+    void assetManager.prefetch(url, renderer, 8_000).then((asset) => {
+      if (alive && asset) setRenderedChapter(activeChapter);
+    });
+    return () => { alive = false; };
+  }, [activeChapter, lod, renderer]);
+  const definition = sceneDefinitions[renderedChapter];
+  const hero = r6ChapterHero[renderedChapter];
 
-  return (
-    <>
-      <EnvironmentProbe />
-      <CinematicSky />
-      <CinematicCameraRig quality={quality} />
-      <AssetPreloader quality={quality} />
-
-      <mesh position={[0, -1.55, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={quality === "high"}>
-        <planeGeometry args={[200, 200]} />
-        <meshStandardMaterial color="#ded8cd" roughness={1} metalness={0} transparent opacity={0.28} />
-      </mesh>
-      <EnergyField quality={quality} />
-
-      <SceneAsset key={sceneDefinitions[from].id} definition={sceneDefinitions[from]} sceneIndex={from} quality={quality} onReady={from === 0 ? onFirstSceneReady : undefined} />
-      {to !== from && <SceneAsset key={sceneDefinitions[to].id} definition={sceneDefinitions[to]} sceneIndex={to} quality={quality} />}
-    </>
-  );
+  return <>
+    <EnvironmentProbe />
+    <CinematicSky />
+    <CinematicCameraRig quality={quality} />
+    <AssetPreloader quality={quality} />
+    <mesh position={[0, -1.52, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <planeGeometry args={[140, 140]} />
+      <meshStandardMaterial color="#d9d4ca" roughness={0.96} metalness={0} />
+    </mesh>
+    <HeroAsset key={`${hero}-${lod}`} hero={hero} lod={lod} definition={definition} quality={quality} onReady={renderedChapter === 0 ? onFirstSceneReady : undefined} />
+  </>;
 }

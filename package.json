@@ -1,6 +1,6 @@
 {
   "name": "convalt-energy-3d-web",
-  "version": "0.7.0-stage6-r5",
+  "version": "0.9.0-stage6-r6.1.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -42,7 +42,7 @@
     "benchmark:prep": "npm run typecheck && npm run build",
     "validate:corporate": "node scripts/validate-corporate.mjs",
     "validate:package": "node scripts/validate-package-completeness.mjs",
-    "validate:corporate:full": "npm run validate:package && npm run validate:imports && npm run validate:corporate && npm run validate:corporate:r3 && npm run validate:corporate:r3.1 && npm run validate:corporate:r4 && npm run validate:corporate:r5 && npm test",
+    "validate:corporate:full": "npm run validate:package && npm run validate:imports && npm run validate:corporate:r6 && npm test",
     "validate:imports": "node scripts/validate-local-imports.mjs",
     "validate:corporate:r3": "node scripts/validate-corporate-r3.mjs",
     "test": "node --test tests/*.test.mjs",
@@ -50,31 +50,24 @@
     "assets:r4": "python3 scripts/generate-r4-assets.py",
     "validate:corporate:r4": "node scripts/validate-corporate-r4.mjs",
     "assets:r5": "python3 scripts/generate-r5-hybrid-assets.py",
-    "validate:corporate:r5": "node scripts/validate-corporate-r5.mjs"
+    "validate:corporate:r5": "node scripts/validate-corporate-r5.mjs",
+    "assets:r6": "python3 scripts/build-r61-assets.py",
+    "validate:corporate:r6": "node scripts/validate-corporate-r6.mjs",
+    "qa:r6": "npm run validate:r61:source && npm run validate:r61:textures && npm run validate:corporate:r6 && npm run validate:r6:proxy && npm run prove:r6:cpu-fallback && node --test tests/r6-assets.test.mjs tests/r6-runtime-contract.test.mjs tests/r612-rendering-contract.test.mjs",
+    "validate:r6:proxy": "python3 scripts/validate-r6-proxy-provenance.py",
+    "prove:r6:cpu-fallback": "python3 scripts/prove-r6-cpu-fallback.py",
+    "qa:r6:fallback-runtime": "python3 scripts/acceptance_qa.py --url http://127.0.0.1:3000 --webgl-fallback-proof-only --out artifacts/r6-webgl-fallback",
+    "qa:r6:six-chapter": "python3 scripts/acceptance_qa.py --url http://127.0.0.1:3000 --six-chapter-proof-only --out artifacts/r6-six-chapter",
+    "assets:r61:author-source": "python3 scripts/author-r61-manufacturing-source.py",
+    "validate:r61:source": "python3 scripts/validate-r61-source.py",
+    "validate:r61:textures": "python3 scripts/validate-r61-textures.py",
+    "validate:r61:textures:release": "python3 scripts/validate-r61-textures.py --require-basis",
+    "assets:r6:release": "python3 scripts/build-r61-assets.py --require-basis",
+    "validate:r61:source:release": "python3 scripts/validate-r61-source.py --require-approval",
+    "validate:r612:integrity": "node scripts/verify-r612-release-integrity.mjs",
+    "validate:r612:manual": "node scripts/verify-r612-manual-evidence.mjs"
   },
-  "dependencies": {
-    "@react-three/fiber": "9.7.0",
-    "gsap": "3.15.0",
-    "next": "16.3.4",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "three": "0.185.1",
-    "zustand": "5.0.15",
-    "@fontsource-variable/inter": "5.3.0",
-    "@fontsource-variable/dm-sans": "5.3.0"
-  },
-  "devDependencies": {
-    "@types/node": "22.18.0",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.7",
-    "@types/three": "0.185.4",
-    "typescript": "5.9.2"
-  },
-  "packageManager": "npm@10.9.2",
-  "engines": {
-    "node": ">=22 <23",
-    "npm": ">=10 <11"
-  },
-  "stage6CorporateEnhancement": "2026.09",
-  "stage6CorporateRevision": "r5-hybrid-cinematic-fidelity"
+  "dependencies": {"@react-three/fiber":"9.7.0","gsap":"3.15.0","next":"16.3.4","react":"19.2.8","react-dom":"19.2.8","three":"0.185.1","zustand":"5.0.15","@fontsource-variable/inter":"5.3.0","@fontsource-variable/dm-sans":"5.3.0"},
+  "devDependencies": {"@types/node":"22.18.0","@types/react":"19.2.18","@types/react-dom":"19.2.7","@types/three":"0.185.4","typescript":"5.9.2"},
+  "packageManager":"npm@10.9.2","engines":{"node":">=22 <23","npm":">=10 <11"},"stage6CorporateEnhancement":"2026.09","stage6CorporateRevision":"r6.1-manufacturing-fidelity"
 }

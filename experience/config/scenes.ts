@@ -41,12 +41,29 @@ const assetSet = requestedAssetSet === "approved"
     ? "stage3"
     : requestedAssetSet === "r4"
       ? "r4"
-      : "r5";
-const assetBase = assetSet === "r5" ? "/models/r5/high" : `/models/${assetSet}`;
-const fallbackBase = assetSet === "r5" ? "/fallback/r5" : assetSet === "r4" ? "/fallback/r4" : "/fallback/stage3";
+      : requestedAssetSet === "r5" ? "r5" : "r6";
+const r6LegacyNameToHero = {
+  "hero-campus": "integrated-campus",
+  "manufacturing": "manufacturing-line",
+  "power-generation": "substation-bess",
+  "data-centers": "data-center-cooling",
+  "recycling": "recycling-intake",
+  "closing-platform": "connected-campus",
+} as const;
 
-const asset = (name: string) => `${assetBase}/${name}.glb`;
-const fallback = (name: string) => `${fallbackBase}/${name}.svg`;
+type LegacyAssetName = keyof typeof r6LegacyNameToHero;
+
+const asset = (name: LegacyAssetName) => {
+  if (assetSet === "r6") return `/models/r6/hero/${r6LegacyNameToHero[name]}/lod0.glb`;
+  if (assetSet === "r5") return `/models/r5/high/${name}.glb`;
+  return `/models/${assetSet}/${name}.glb`;
+};
+const fallback = (name: LegacyAssetName) => {
+  if (assetSet === "r6") return `/fallback/r6/${r6LegacyNameToHero[name]}.webp`;
+  if (assetSet === "r5") return `/fallback/r5/${name}.svg`;
+  if (assetSet === "r4") return `/fallback/r4/${name}.svg`;
+  return `/fallback/stage3/${name}.svg`;
+};
 
 /**
  * R4 camera art direction is authored per breakpoint rather than applying
@@ -67,7 +84,7 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
       mobile: { position: [3.2, 5.0, 17.2], target: [0.0, 0.9, 0.4], fov: 51 },
     },
     model: {
-      desktop: { position: [1.85, -1.34, 0], rotation: [0, -0.18, 0], scale: 0.60 },
+      desktop: { position: [3.25, -1.32, 0.15], rotation: [0, -0.13, 0], scale: 0.62 },
       tablet: { position: [0.35, -1.34, 0.1], rotation: [0, -0.14, 0], scale: 0.60 },
       mobile: { position: [0, -1.34, 0.65], rotation: [0, -0.08, 0], scale: 0.54 },
     },
@@ -91,7 +108,7 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
       mobile: { position: [2.6, 4.1, 14.6], target: [0.2, 1.05, 0.55], fov: 52 },
     },
     model: {
-      desktop: { position: [2.05, -1.35, 0.0], rotation: [0, -0.10, 0], scale: 0.68 },
+      desktop: { position: [3.45, -1.34, 0.10], rotation: [0, -0.07, 0], scale: 0.66 },
       tablet: { position: [0.45, -1.35, 0.2], rotation: [0, -0.08, 0], scale: 0.64 },
       mobile: { position: [0, -1.35, 0.75], rotation: [0, -0.03, 0], scale: 0.56 },
     },
@@ -115,8 +132,8 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
       mobile: { position: [1.8, 4.6, 16.5], target: [0, 0.85, 0.5], fov: 51 },
     },
     model: {
-      desktop: { position: [-2.05, -1.35, 0.0], rotation: [0, 0.18, 0], scale: 0.61 },
-      tablet: { position: [-0.2, -1.35, 0.15], rotation: [0, 0.13, 0], scale: 0.60 },
+      desktop: { position: [-3.55, -1.34, 0.15], rotation: [0, 0.11, 0], scale: 0.64 },
+      tablet: { position: [-0.2, -1.35, 0.15], rotation: [0, 0.13, 0], scale: 0.62 },
       mobile: { position: [0, -1.35, 0.72], rotation: [0, 0.06, 0], scale: 0.53 },
     },
     accent: "#3d5a80",
@@ -139,7 +156,7 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
       mobile: { position: [0.9, 4.1, 15.2], target: [0.05, 1.0, 0.45], fov: 51 },
     },
     model: {
-      desktop: { position: [2.10, -1.34, 0.0], rotation: [0, -0.08, 0], scale: 0.65 },
+      desktop: { position: [3.50, -1.34, 0.05], rotation: [0, -0.05, 0], scale: 0.63 },
       tablet: { position: [0.2, -1.34, 0.2], rotation: [0, -0.05, 0], scale: 0.61 },
       mobile: { position: [0, -1.34, 0.75], rotation: [0, -0.02, 0], scale: 0.54 },
     },
@@ -163,7 +180,7 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
       mobile: { position: [0.0, 3.95, 15.0], target: [0, 0.95, 0.5], fov: 51 },
     },
     model: {
-      desktop: { position: [-2.00, -1.35, 0], rotation: [0, 0.13, 0], scale: 0.65 },
+      desktop: { position: [-3.55, -1.34, 0.10], rotation: [0, 0.08, 0], scale: 0.63 },
       tablet: { position: [-0.2, -1.35, 0.2], rotation: [0, 0.09, 0], scale: 0.61 },
       mobile: { position: [0, -1.35, 0.78], rotation: [0, 0.04, 0], scale: 0.54 },
     },
@@ -187,7 +204,7 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
       mobile: { position: [-0.4, 5.1, 18.6], target: [0.0, 0.9, 0.4], fov: 50 },
     },
     model: {
-      desktop: { position: [1.60, -1.35, 0], rotation: [0, -0.05, 0], scale: 0.58 },
+      desktop: { position: [3.15, -1.34, 0.18], rotation: [0, -0.04, 0], scale: 0.58 },
       tablet: { position: [0.1, -1.35, 0.2], rotation: [0, -0.03, 0], scale: 0.57 },
       mobile: { position: [0, -1.35, 0.8], rotation: [0, -0.01, 0], scale: 0.51 },
     },
@@ -242,6 +259,10 @@ export function modelTransform(definition: SceneDefinition, width: number): Mode
 }
 
 export function sceneAssetForQuality(definition: SceneDefinition, quality: "high" | "medium") {
+  if (assetSet === "r6") {
+    const hero = r6LegacyNameToHero[definition.assetName as LegacyAssetName];
+    return `/models/r6/hero/${hero}/${quality === "high" ? "lod0" : "lod1"}.glb`;
+  }
   if (assetSet === "r5") return `/models/r5/${quality}/${definition.assetName}.glb`;
   return definition.asset;
 }
