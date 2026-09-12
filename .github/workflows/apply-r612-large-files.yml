@@ -48,14 +48,11 @@ jobs:
           if 'R6.1.2 patch: accessible overlay' not in text:
               css.write_text(text.rstrip() + '\n' + block, encoding='utf-8')
           PY
-      - name: Validate reconstructed baseline before commit
+      - name: Validate materialized baseline is safe to persist
         run: |
           set -euo pipefail
           test -f scripts/generate-r6-assets.py
-          test -f scripts/validate-r6-proxy-provenance.py
-          test -f scripts/prove-r6-cpu-fallback.py
-          test -f scripts/validate-corporate-r6.mjs
-          test -f tests/r6-assets.test.mjs
+          test -f scripts/render-r6-fallbacks.py
           grep -q 'R6.1.2 patch: accessible overlay' app/globals.css
           git diff --check
       - name: Commit normalized baseline and remove one-shot machinery
