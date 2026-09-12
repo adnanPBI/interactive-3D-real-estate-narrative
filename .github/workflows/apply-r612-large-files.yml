@@ -1,30 +1,54 @@
-name: Apply R6.1.2 large-file remediation
+name: Normalize R6 baseline and complete R6.1.2 remediation
 on:
   push:
     branches: [r612-codex-remediation]
 permissions:
   contents: write
 jobs:
-  patch:
-    if: ${{ !contains(github.event.head_commit.message, '[large-file-remediation]') }}
+  normalize:
+    if: ${{ !contains(github.event.head_commit.message, '[normalized-r612]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: r612-codex-remediation
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Apply exact acceptance/CSS patch
+      - name: Materialize staged R6 source upgrade
+        run: |
+          set -euo pipefail
+          if compgen -G "scripts/r6-source.patch.gz.b64.part-*" > /dev/null; then
+            cat scripts/r6-source.patch.gz.b64.part-* | base64 --decode | gzip --decompress > /tmp/r6-source.patch
+            git apply --3way --exclude=.github/workflows/vercel-r4-deploy.yml /tmp/r6-source.patch
+            rm scripts/r6-source.patch.gz.b64.part-*
+          else
+            echo "R6 source upgrade payload is already materialized."
+          fi
+          python3 tools/repair-r6-source.py
+          cp tools/r6-headless-fallbacks.py scripts/render-r6-fallbacks.py
+      - name: Complete exact R6.1.2 acceptance and CSS remediation
         run: python3 scripts/apply-r612-large-file-remediation.py
-      - name: Commit patched files and remove one-shot machinery
+      - name: Validate normalized working tree before commit
+        run: |
+          set -euo pipefail
+          test -f scripts/acceptance_qa.py
+          test -f scripts/validate-r6-proxy-provenance.py
+          test -f scripts/prove-r6-cpu-fallback.py
+          test -f scripts/validate-corporate-r6.mjs
+          test -f tests/r6-assets.test.mjs
+          test -f tests/r612-rendering-contract.test.mjs
+          grep -q 'R6.1.2 patch: accessible overlay' app/globals.css
+          git diff --check
+      - name: Commit normalized baseline and remove one-shot machinery
         run: |
           set -euo pipefail
           rm scripts/apply-r612-large-file-remediation.py
           rm .github/workflows/apply-r612-large-files.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add scripts/acceptance_qa.py app/globals.css scripts/apply-r612-large-file-remediation.py .github/workflows/apply-r612-large-files.yml
+          git add -A
           git diff --cached --check
-          git commit -m 'fix(r612): apply large-file remediation [large-file-remediation]'
+          git commit -m 'fix(r612): materialize R6 baseline and complete remediation [normalized-r612]'
           git push origin HEAD:r612-codex-remediation
