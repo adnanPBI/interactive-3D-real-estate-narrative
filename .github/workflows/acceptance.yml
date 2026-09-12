@@ -27,8 +27,8 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run build
-      - name: Run source/runtime regression contracts
-        run: npm test
+      - name: Run source/runtime remediation contracts
+        run: node --test tests/r6-runtime.test.mjs tests/r6-runtime-contract.test.mjs tests/r612-remediation-contract.test.mjs
       - name: Save build evidence marker
         run: |
           mkdir -p artifacts/build
@@ -64,15 +64,17 @@ jobs:
         run: npm run validate:r6:proxy
       - name: Re-prove deterministic CPU fallback generation
         run: npm run prove:r6:cpu-fallback
+      - name: Run generated-asset budgets and structure tests
+        run: node --test tests/r6-assets.test.mjs tests/r6-budgets.test.mjs
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: success()
         with:
-          name: r612-release-asset-evidence
+          name: r612-generated-runtime-assets
           path: |
+            public/models/r6
+            public/textures/r6
+            public/fallback/r6
             artifacts/r6-cpu-fallback-proof.json
-            public/models/r6/manifest.json
-            public/models/r6/proxy-reduction.json
-          if-no-files-found: ignore
 
   browser-acceptance:
     needs: [code-build, release-assets]
@@ -89,6 +91,10 @@ jobs:
       CONTACT_WEBHOOK_URL: http://127.0.0.1:8787/contact
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: r612-generated-runtime-assets
+          path: .
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
