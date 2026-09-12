@@ -30,6 +30,8 @@ on:
       - "tests/r612-rendering-contract.test.mjs"
       - "package.json"
       - "package-lock.json"
+      - "vercel.json"
+      - ".nvmrc"
       - "tsconfig.json"
       - "deployment/**"
       - "content/**"
@@ -52,17 +54,22 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.11"
           cache: pip
           cache-dependency-path: |
             requirements-assets.txt
             requirements-acceptance.txt
+      - name: Runtime version diagnostics
+        run: |
+          node --version
+          npm --version
+          python --version
       - name: Install exact Node dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
       - name: Install asset and acceptance validation dependencies
         run: |
           python -m pip install --disable-pip-version-check -r requirements-assets.txt
@@ -144,16 +151,34 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
+          set -euo pipefail
           test -n "${VERCEL_TOKEN:-}" || { echo "::error::VERCEL_TOKEN is not configured"; exit 2; }
           STATUS=$(curl -sS -o /tmp/vercel-user.json -w '%{http_code}' -H "Authorization: Bearer ${VERCEL_TOKEN}" https://api.vercel.com/v2/user)
           echo "Vercel /v2/user HTTP status: ${STATUS}"
           test "$STATUS" = "200"
+      - name: Normalize Vercel project runtime
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -fsS -X PATCH \
+            "https://api.vercel.com/v9/projects/interactive-3d-real-estate-narrative-r4?teamId=team_GI0H1MJPmSQhzRXjQ1DMbK27" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"nodeVersion":"22.x","autoAssignCustomDomains":true,"buildCommand":"npm run build","installCommand":"npm ci --no-audit --no-fund","framework":"nextjs"}')
+          printf '%s' "$RESPONSE" > /tmp/vercel-project-update.json
+          node -e 'const p=JSON.parse(require("fs").readFileSync("/tmp/vercel-project-update.json","utf8")); if(p.nodeVersion!=="22.x") throw new Error(`Vercel nodeVersion=${p.nodeVersion}`); console.log(`Vercel runtime=${p.nodeVersion}; build=${p.buildCommand}; install=${p.installCommand}`)'
       - name: Link and deploy production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
+          set -euo pipefail
           npx vercel@latest link --yes --project interactive-3d-real-estate-narrative-r4 --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN"
-          DEPLOY_URL=$(npx vercel@latest deploy --prod --yes --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN" 2>&1 | tee vercel-deploy.log | tail -n 1)
+          npx vercel@latest pull --yes --environment=production --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN"
+          npx vercel@latest build --prod --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN"
+          npx vercel@latest deploy --prebuilt --prod --yes --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN" 2>&1 | tee vercel-deploy.log
+          DEPLOY_URL=$(grep -Eo 'https://[^[:space:]]+\.vercel\.app' vercel-deploy.log | tail -n 1)
+          test -n "$DEPLOY_URL"
           echo "DEPLOY_URL=$DEPLOY_URL" >> "$GITHUB_ENV"
       - name: Post-deployment production smoke and six-chapter regression
         env:
