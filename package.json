@@ -61,6 +61,7 @@
     "assets:r61:author-source": "python3 scripts/author-r61-manufacturing-source.py",
     "validate:r61:source": "python3 scripts/validate-r61-source.py",
     "validate:r61:textures": "python3 scripts/validate-r61-textures.py",
+    "validate:r61:textures:release": "python3 scripts/validate-r61-textures.py --require-basis",
     "assets:r6:release": "python3 scripts/build-r61-assets.py --require-basis",
     "validate:r61:source:release": "python3 scripts/validate-r61-source.py --require-approval",
     "validate:r612:integrity": "node scripts/verify-r612-release-integrity.mjs",
