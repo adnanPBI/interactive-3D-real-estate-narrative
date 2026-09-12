@@ -28,8 +28,8 @@ jobs:
       - name: Require reviewed lockfile
         run: node scripts/check-lockfile.mjs
       - run: npm ci --no-audit --no-fund
-      - name: Install deterministic asset validation dependencies
-        run: pip install -r requirements-assets.txt
+      - name: Install deterministic CPU-only asset validation dependencies
+        run: pip install trimesh==4.11.1 numpy==2.3.5 Pillow==12.3.0
       - name: Validate R6 corporate asset contract
         run: npm run validate:corporate:r6
       - name: Run R6 regression tests
