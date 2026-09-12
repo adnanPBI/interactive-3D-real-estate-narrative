@@ -8,43 +8,42 @@ export type ChapterRange = {
   cameraAnchor: number;
 };
 
-/**
- * Single source of truth for R3 cinematic motion and performance limits.
- *
- * The home no longer uses a physical scroll range. Six discrete chapter anchors
- * are connected by a calm GSAP tween and sampled by the allocation-free camera
- * spline. Keeping these values centralized makes the interaction auditable and
- * prevents renderer magic numbers from drifting across components.
- */
+/** R6 master motion and enforceable runtime budgets. */
 export const storyMotion = {
   chapterCount: 6,
-  chapterTransitionSeconds: 1.15,
-  cameraDamping: 5.2,
-  fovDamping: 4.8,
-  lightDamping: 3.2,
-  sceneBlendDamping: 5.6,
-  splineTension: 0.40,
+  chapterTransitionSeconds: 1.18,
+  cameraDamping: 5.4,
+  fovDamping: 5.0,
+  lightDamping: 3.4,
+  sceneBlendDamping: 6.2,
+  splineTension: 0.38,
   pointerParallax: {
-    desktop: { x: 0.015, y: 0.010 },
-    tablet: { x: 0.008, y: 0.006 },
-    mobile: { x: 0.002, y: 0.002 },
+    desktop: { x: 0.012, y: 0.008 },
+    tablet: { x: 0.006, y: 0.004 },
+    mobile: { x: 0.0015, y: 0.0015 },
   },
   quality: {
     high: {
-      initialDpr: 1.50,
-      minDpr: 1.00,
-      maxDpr: 1.75,
-      maxDrawCalls: 110,
-      maxTriangles: 340_000,
-      maxTextures: 40,
+      initialDpr: 1.25,
+      minDpr: 0.95,
+      maxDpr: 1.35,
+      maxDrawCalls: 120,
+      maxTriangles: 220_000,
+      maxTextures: 48,
+      maxTextureMemoryMB: 180,
+      shadowMapSize: 2048,
+      composerSamples: 4,
     },
     medium: {
-      initialDpr: 1.15,
-      minDpr: 0.85,
-      maxDpr: 1.35,
-      maxDrawCalls: 95,
-      maxTriangles: 220_000,
-      maxTextures: 32,
+      initialDpr: 1.0,
+      minDpr: 0.82,
+      maxDpr: 1.0,
+      maxDrawCalls: 80,
+      maxTriangles: 120_000,
+      maxTextures: 34,
+      maxTextureMemoryMB: 100,
+      shadowMapSize: 1024,
+      composerSamples: 0,
     },
   },
 } as const;
@@ -64,7 +63,6 @@ export function clampStoryProgress(value: number) {
   return Math.max(0, Math.min(1, value));
 }
 
-/** Nearest authored anchor, appropriate for discrete chapter transitions. */
 export function activeChapterForProgress(value: number) {
   const p = clampStoryProgress(value);
   return Math.min(chapterRanges.length - 1, Math.round(p * (chapterRanges.length - 1)));

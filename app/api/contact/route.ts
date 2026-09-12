@@ -36,6 +36,26 @@ function allowedOrigin(request: NextRequest) {
   return configured.includes(origin);
 }
 
+async function readJsonBodyLimited(request: NextRequest) {
+  const declared = Number(request.headers.get("content-length") || 0);
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) throw new Error("body_too_large");
+  if (!request.body) return {};
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let total = 0; let text = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_BODY_BYTES) { await reader.cancel("body too large"); throw new Error("body_too_large"); }
+    text += decoder.decode(value, { stream: true });
+  }
+  text += decoder.decode();
+  const parsed: unknown = JSON.parse(text || "{}");
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid_json_object");
+  return parsed as Record<string, unknown>;
+}
+
 async function rateLimit(key: string) {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -45,7 +65,22 @@ async function rateLimit(key: string) {
     const increment = await fetch(`${url}/incr/${encodeURIComponent(safeKey)}`, { headers, cache: "no-store" });
     if (!increment.ok) throw new Error("rate_limit_provider_failed");
     const { result } = await increment.json() as { result: number };
-    if (result === 1) await fetch(`${url}/expire/${encodeURIComponent(safeKey)}/${WINDOW_SECONDS}`, { headers, cache: "no-store" });
+    if (result === 1) {
+      const expiry = await fetch(`${url}/expire/${encodeURIComponent(safeKey)}/${WINDOW_SECONDS}`, { headers, cache: "no-store" });
+      if (!expiry.ok) {
+        await fetch(`${url}/del/${encodeURIComponent(safeKey)}`, { headers, cache: "no-store" }).catch(() => undefined);
+        throw new Error("rate_limit_expiry_failed");
+      }
+    } else {
+      const ttl = await fetch(`${url}/ttl/${encodeURIComponent(safeKey)}`, { headers, cache: "no-store" });
+      if (ttl.ok) {
+        const value = await ttl.json() as { result?: number };
+        if (Number(value.result) < 0) {
+          const repaired = await fetch(`${url}/expire/${encodeURIComponent(safeKey)}/${WINDOW_SECONDS}`, { headers, cache: "no-store" });
+          if (!repaired.ok) throw new Error("rate_limit_expiry_failed");
+        }
+      }
+    }
     return result <= MAX_REQUESTS;
   }
   const now = Date.now();
@@ -123,9 +158,7 @@ export async function POST(request: NextRequest) {
   try {
     if (!allowedOrigin(request)) return NextResponse.json({ error: "Request origin is not allowed." }, { status: 403 });
     if (!request.headers.get("content-type")?.includes("application/json")) return NextResponse.json({ error: "Unsupported request format." }, { status: 415 });
-    const raw = await request.text();
-    if (Buffer.byteLength(raw, "utf8") > MAX_BODY_BYTES) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
-    const body = JSON.parse(raw) as Record<string, unknown>;
+    const body = await readJsonBodyLimited(request);
     const payload = validate(body);
     if (!payload) return NextResponse.json({ error: "Please complete all required fields with valid information." }, { status: 400 });
     if (payload.website) return NextResponse.json({ message: "Thank you. Your enquiry has been received.", reference });
@@ -140,7 +173,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const reason = error instanceof Error ? error.message : "unknown";
     console.error("[contact-error]", { reference, reason });
+    if (reason === "body_too_large") return NextResponse.json({ error: "Request is too large.", reference }, { status: 413 });
+    if (reason === "invalid_json_object" || error instanceof SyntaxError) return NextResponse.json({ error: "Request body must be a JSON object.", reference }, { status: 400 });
     const configurationError = reason === "delivery_not_configured";
-    return NextResponse.json({ error: configurationError ? "Contact delivery is not configured on this deployment." : "Your enquiry could not be delivered right now. Please try again later.", reference }, { status: configurationError ? 503 : 502 });
+    const providerError = reason.startsWith("rate_limit_");
+    return NextResponse.json({ error: configurationError ? "Contact delivery is not configured on this deployment." : providerError ? "Rate-limit service is temporarily unavailable. Please try again." : "Your enquiry could not be delivered right now. Please try again later.", reference }, { status: configurationError || providerError ? 503 : 502 });
   }
 }

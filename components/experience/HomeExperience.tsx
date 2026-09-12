@@ -8,6 +8,7 @@ import { chapters } from "@/content/site";
 import { useExperienceStore } from "@/lib/experienceStore";
 import { AccessibilityTwin } from "./AccessibilityTwin";
 import { StaticSceneFallback } from "./StaticSceneFallback";
+import { ExperienceErrorBoundary } from "./ExperienceErrorBoundary";
 import { useQualityTier } from "./useQualityTier";
 
 const ExperienceCanvas = dynamic(
@@ -26,7 +27,7 @@ const WHEEL_RESET_MS = 800;
 const SWIPE_THRESHOLD = 44;
 
 function isInteractiveTarget(target: EventTarget | null) {
-  return target instanceof HTMLElement && Boolean(target.closest("a,button,input,select,textarea,[role='button'],[contenteditable='true']"));
+  return target instanceof HTMLElement && Boolean(target.closest("a,button,input,select,textarea,[role='button'],[contenteditable='true'],[data-allow-scroll='true'],.menu-overlay,.a11y-popover"));
 }
 
 /**
@@ -50,6 +51,7 @@ export function HomeExperience() {
   const [canvasReady, setCanvasReady] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
   const [showBenchmark, setShowBenchmark] = useState(false);
+  const [runtimeFallback, setRuntimeFallback] = useState(false);
 
   const setQuality = useExperienceStore((state) => state.setQuality);
   const activeChapter = useExperienceStore((state) => state.activeChapter);
@@ -57,10 +59,18 @@ export function HomeExperience() {
   const setTargetProgress = useExperienceStore((state) => state.setTargetProgress);
   const setActiveChapter = useExperienceStore((state) => state.setActiveChapter);
 
-  useEffect(() => setQuality(quality), [quality, setQuality]);
+  useEffect(() => setQuality(runtimeFallback ? "fallback" : quality), [quality, runtimeFallback, setQuality]);
+  useEffect(() => {
+    const fail = (event: Event) => {
+      const reason = (event as CustomEvent<{ reason?: string }>).detail?.reason ?? "runtime-error";
+      console.error(`[3D] Switching to static fallback: ${reason}`);
+      setRuntimeFallback(true);
+      setCanvasReady(true);
+    };
+    window.addEventListener("convalt:webgl-fatal", fail);
+    return () => window.removeEventListener("convalt:webgl-fatal", fail);
+  }, []);
 
-  // The immersive home is a fixed story stage. Navigation to 2D pages exits
-  // this component and restores normal document scrolling.
   useEffect(() => {
     const previousBodyOverflow = document.body.style.overflow;
     const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -73,7 +83,6 @@ export function HomeExperience() {
     };
   }, []);
 
-  // Suspend continuous rendering when the tab is backgrounded.
   useEffect(() => {
     const publish = () => setCanvasActive(document.visibilityState === "visible");
     publish();
@@ -81,16 +90,11 @@ export function HomeExperience() {
     return () => document.removeEventListener("visibilitychange", publish);
   }, []);
 
-  // QA instrumentation remains entirely opt-in and is absent from the normal
-  // client viewport/DOM unless the explicit query flag is present.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setShowBenchmark(params.get("benchmark") === "1" || params.get("qa") === "1");
   }, []);
 
-  // Tell the branded preloader that the first visual state is usable. The R3F
-  // canvas has already been rendering behind the gate, so initial shaders get a
-  // short warm-up window before the overlay leaves.
   useEffect(() => {
     if (quality !== "fallback" && !canvasReady) return;
     const delay = quality === "fallback" ? 100 : 360;
@@ -108,7 +112,7 @@ export function HomeExperience() {
     const targetProgress = clamped / LAST_CHAPTER;
     setTargetProgress(targetProgress);
 
-    const reduced = quality === "fallback" || document.documentElement.dataset.motion === "reduced";
+    const reduced = runtimeFallback || quality === "fallback" || document.documentElement.dataset.motion === "reduced";
     if (immediate || reduced) {
       transitionTween.current?.kill();
       transitioning.current = false;
@@ -135,10 +139,8 @@ export function HomeExperience() {
       },
       onInterrupt: () => { transitioning.current = false; },
     });
-  }, [quality, setActiveChapter, setTargetProgress, setTimelineProgress]);
+  }, [quality, runtimeFallback, setActiveChapter, setTargetProgress, setTimelineProgress]);
 
-  // Wheel / touch / keyboard input are interpreted as chapter intent, not as
-  // physical page scrolling. This is the primary SOW interaction model.
   useEffect(() => {
     const handleWheel = (event: WheelEvent) => {
       if (isInteractiveTarget(event.target)) return;
@@ -208,7 +210,6 @@ export function HomeExperience() {
     };
   }, [goToChapter]);
 
-  // One restrained text reveal per chapter; no card choreography or stacked HUDs.
   useEffect(() => {
     if (quality === "fallback" || document.documentElement.dataset.motion === "reduced") return;
     const element = copyRefs.current[activeChapter];
@@ -219,10 +220,12 @@ export function HomeExperience() {
 
   return (
     <div className="experience-shell experience-shell--corporate" ref={shellRef} data-interacted={hasInteracted}>
-      {quality === "fallback" ? (
+      {quality === "fallback" || runtimeFallback ? (
         <StaticSceneFallback activeChapter={activeChapter} />
       ) : (
-        <ExperienceCanvas quality={quality} active={canvasActive} onFirstSceneReady={() => setCanvasReady(true)} />
+        <ExperienceErrorBoundary onError={() => setRuntimeFallback(true)}>
+          <ExperienceCanvas quality={quality} active={canvasActive} onFirstSceneReady={() => setCanvasReady(true)} />
+        </ExperienceErrorBoundary>
       )}
 
       <nav className="story-progress" aria-label="Story chapters">

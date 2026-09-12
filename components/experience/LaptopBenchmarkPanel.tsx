@@ -13,6 +13,7 @@ export type SceneBenchmark = {
   droppedFrameRatio: number;
   frames: number;
   sampleSeconds: number;
+  longStalls: number;
   pass: boolean;
 };
 
@@ -27,6 +28,8 @@ export type LaptopBenchmarkReport = {
   quality: string;
   criteria: { averageFps: number; onePercentLowFps: number; p95FrameMs: number };
   results: SceneBenchmark[];
+  rendererMode: "webgl" | "fallback" | "missing";
+  rendererValid: boolean;
   overallPass: boolean;
 };
 
@@ -59,7 +62,7 @@ async function sampleFrames(seconds: number) {
       if (!start) { start = now; last = now; requestAnimationFrame(frame); return; }
       const delta = now - last;
       last = now;
-      if (delta < 1000) deltas.push(delta);
+      if (delta > 0) deltas.push(delta);
       if (now - start < seconds * 1000) requestAnimationFrame(frame);
       else resolve();
     };
@@ -109,6 +112,9 @@ export function LaptopBenchmarkPanel({ quality, activeChapter }: { quality: stri
       const p95FrameMs = percentile(deltas, 0.95);
       const maxFrameMs = Math.max(0, ...deltas);
       const dropped = deltas.filter((delta) => delta > 20).length / Math.max(1, deltas.length);
+      const longStalls = deltas.filter((delta) => delta >= 250).length;
+      const rendererMode = document.querySelector(".experience-canvas canvas") ? "webgl" : document.querySelector(".experience-fallback") ? "fallback" : "missing";
+      const rendererValid = rendererMode === "webgl" && !/unavailable|software fallback/i.test(webglRenderer());
       const scene = {
         scene: chapters[index].id,
         averageFps: Number(averageFps.toFixed(2)),
@@ -118,7 +124,8 @@ export function LaptopBenchmarkPanel({ quality, activeChapter }: { quality: stri
         droppedFrameRatio: Number(dropped.toFixed(4)),
         frames: deltas.length,
         sampleSeconds,
-        pass: averageFps >= 58 && onePercentLowFps >= 45 && p95FrameMs <= 20,
+        longStalls,
+        pass: rendererValid && longStalls === 0 && averageFps >= 58 && onePercentLowFps >= 45 && p95FrameMs <= 20,
       } satisfies SceneBenchmark;
       results.push(scene);
     }
@@ -132,9 +139,11 @@ export function LaptopBenchmarkPanel({ quality, activeChapter }: { quality: stri
       deviceMemory: nav.deviceMemory ?? null,
       webglRenderer: webglRenderer(),
       quality,
+      rendererMode: document.querySelector(".experience-canvas canvas") ? "webgl" : document.querySelector(".experience-fallback") ? "fallback" : "missing",
+      rendererValid: Boolean(document.querySelector(".experience-canvas canvas")) && !/unavailable|software fallback/i.test(webglRenderer()),
       criteria: { averageFps: 58, onePercentLowFps: 45, p95FrameMs: 20 },
       results,
-      overallPass: results.length === chapters.length && results.every((result) => result.pass),
+      overallPass: results.length === chapters.length && results.every((result) => result.pass) && Boolean(document.querySelector(".experience-canvas canvas")) && !/unavailable|software fallback/i.test(webglRenderer()),
     };
     window.__CONVALT_LAPTOP_BENCHMARK__ = nextReport;
     setReport(nextReport);

@@ -17,6 +17,7 @@ const warm = new THREE.Color("#fff7e8");
 const bgA = new THREE.Color();
 const bgB = new THREE.Color();
 const bg = new THREE.Color();
+const SHADOW_POSITION_EPSILON = 0.004;
 
 function smoothStep(value: number) {
   return value * value * (3 - 2 * value);
@@ -54,22 +55,25 @@ function setSplineVector(target: THREE.Vector3, width: number, from: number, t: 
 /**
  * Camera + atmospheric orchestration. All authored motion is a pure function of
  * the master timeline progress; frame-time damping only removes display jitter.
+ * Shadow-map invalidation is bounded by actual sun-position movement because the
+ * renderer has shadowMap.autoUpdate disabled for R6.
  */
 export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) {
   const sun = useRef<THREE.DirectionalLight>(null);
   const rim = useRef<THREE.PointLight>(null);
+  const previousShadowSun = useRef<THREE.Vector3 | null>(null);
 
   useEffect(() => {
     const light = sun.current;
     if (!light) return;
     light.castShadow = true;
-    const shadowSize = quality === "high" ? 2048 : 1024;
+    const shadowSize = storyMotion.quality[quality].shadowMapSize;
     light.shadow.mapSize.set(shadowSize, shadowSize);
     light.shadow.bias = -0.00018;
     light.shadow.normalBias = quality === "high" ? 0.018 : 0.026;
     light.shadow.radius = quality === "high" ? 1.35 : 1.0;
     const camera = light.shadow.camera as THREE.OrthographicCamera;
-    const extent = quality === "high" ? 16 : 14;
+    const extent = quality === "high" ? 14.5 : 12.5;
     camera.left = -extent;
     camera.right = extent;
     camera.top = extent;
@@ -77,6 +81,7 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
     camera.near = 0.5;
     camera.far = 42;
     camera.updateProjectionMatrix();
+    previousShadowSun.current = null;
   }, [quality]);
 
   useFrame((state, delta) => {
@@ -90,9 +95,6 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
     const reduced = typeof document !== "undefined" && document.documentElement.dataset.motion === "reduced";
 
     setSplineVector(desired, state.size.width, timeline.from, t, "position");
-    // R3 camera art direction is monotonic from right to left. Cardinal splines
-    // can overshoot between points, so clamp X to the current segment before
-    // adding only a near-imperceptible pointer offset.
     const segmentA = shotAt(timeline.from, state.size.width).position[0];
     const segmentB = shotAt(timeline.to, state.size.width).position[0];
     desired.x = THREE.MathUtils.clamp(desired.x, Math.min(segmentA, segmentB), Math.max(segmentA, segmentB));
@@ -126,6 +128,12 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
       lightA.fromArray(a.keyLight);
       lightB.fromArray(b.keyLight);
       sun.current.position.copy(lightA.lerp(lightB, t));
+      const prior = previousShadowSun.current;
+      if (!prior || prior.distanceToSquared(sun.current.position) >= SHADOW_POSITION_EPSILON * SHADOW_POSITION_EPSILON) {
+        state.gl.shadowMap.needsUpdate = true;
+        if (prior) prior.copy(sun.current.position);
+        else previousShadowSun.current = sun.current.position.clone();
+      }
       sun.current.intensity = THREE.MathUtils.damp(
         sun.current.intensity,
         THREE.MathUtils.lerp(a.keyIntensity, b.keyIntensity, t) * (quality === "high" ? 1 : 0.9),

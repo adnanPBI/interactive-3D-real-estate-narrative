@@ -1,0 +1,138 @@
+name: R6.1.2 CI and diagnostic acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  code-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DEPLOYMENT_TIER: staging
+      BUILD_ID: ${{ github.sha }}
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_ALLOW_INDEXING: 0
+      NEXT_PUBLIC_3D_ASSET_SET: r6
+      NEXT_PUBLIC_BRAND_ASSET_SET: stage4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Require reviewed lockfile dependency graph
+        run: node scripts/check-lockfile.mjs
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Run source/runtime remediation contracts
+        run: node --test tests/r6-runtime.test.mjs tests/r6-runtime-contract.test.mjs tests/r612-remediation-contract.test.mjs
+      - name: Save build evidence marker
+        run: |
+          mkdir -p artifacts/build
+          printf 'commit=%s\nnode=%s\ncompleted=%s\n' "$GITHUB_SHA" "$(node --version)" "$(date -u +%FT%TZ)" > artifacts/build/next-build.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: r612-code-build-evidence
+          path: artifacts/build/next-build.txt
+
+  release-assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_3D_ASSET_SET: r6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci --no-audit --no-fund
+      - name: Install deterministic CPU-only asset validation dependencies
+        run: python -m pip install --disable-pip-version-check trimesh==4.11.1 numpy==2.3.5 Pillow==12.3.0
+      - name: Materialize byte-identical reviewed Manufacturing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          awk '/^H4sI/{capture=1} capture && /^B64$/{exit} capture{print}' .github/workflows/materialize-r612-source.yml > /tmp/author-r61.py.gz.b64
+          test -s /tmp/author-r61.py.gz.b64
+          base64 -d /tmp/author-r61.py.gz.b64 | gunzip > scripts/author-r61-manufacturing-source.py
+          chmod 755 scripts/author-r61-manufacturing-source.py
+          rm -rf assets-source/r6/heroes/manufacturing-line
+          python scripts/author-r61-manufacturing-source.py
+          ACTUAL_SHA=$(sha256sum assets-source/r6/heroes/manufacturing-line/visual-master.glb | awk '{print $1}')
+          echo "Manufacturing visual-master SHA256=$ACTUAL_SHA"
+          test "$ACTUAL_SHA" = "896f4a4c4d1fca72d36b6e76f5c44d74d1b59338f4b5374a25295665af1b4d8e"
+      - name: Require authoritative R6.1 Manufacturing visual master
+        run: npm run validate:r61:source
+      - name: Build normalized R6.1 assets only from authoritative sources
+        run: npm run assets:r6
+      - name: Validate R6 corporate asset contract
+        run: npm run validate:corporate:r6
+      - name: Prove genuine LOD2 to proxy provenance
+        run: npm run validate:r6:proxy
+      - name: Re-prove deterministic CPU fallback generation
+        run: npm run prove:r6:cpu-fallback
+      - name: Run generated-asset budgets and structure tests
+        run: node --test tests/r6-assets.test.mjs tests/r6-budgets.test.mjs
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: r612-generated-runtime-assets
+          path: |
+            public/models/r6
+            public/textures/r6
+            public/fallback/r6
+            artifacts/r6-cpu-fallback-proof.json
+
+  browser-acceptance:
+    needs: [code-build, release-assets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DEPLOYMENT_TIER: staging
+      BUILD_ID: ${{ github.sha }}
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_ALLOW_INDEXING: 0
+      NEXT_PUBLIC_3D_ASSET_SET: r6
+      NEXT_PUBLIC_BRAND_ASSET_SET: stage4
+      ENABLE_ACCEPTANCE_QA: 1
+      CONTACT_WEBHOOK_URL: http://127.0.0.1:8787/contact
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: r612-generated-runtime-assets
+          path: .
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci --no-audit --no-fund
+      - run: pip install -r requirements-acceptance.txt
+      - run: playwright install --with-deps chromium
+      - run: npm run build
+      - name: Start app and sink webhook
+        run: |
+          node -e "require('http').createServer((req,res)=>{req.resume();req.on('end',()=>{res.writeHead(204);res.end()})}).listen(8787,'127.0.0.1')" > /tmp/webhook.log 2>&1 &
+          npm start > /tmp/app.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:3000/api/health >/dev/null && exit 0; sleep 1; done
+          cat /tmp/app.log
+          exit 1
+      - name: Six-chapter browser acceptance
+        run: python3 scripts/acceptance_qa.py --url http://127.0.0.1:3000 --out artifacts/acceptance --no-fps-gate
+      - name: Runtime WebGL failure fallback proof
+        run: python3 scripts/acceptance_qa.py --url http://127.0.0.1:3000 --webgl-fallback-proof-only --out artifacts/webgl-fallback
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r612-browser-acceptance
+          path: |
+            artifacts/acceptance
+            artifacts/webgl-fallback

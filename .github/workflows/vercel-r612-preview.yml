@@ -1,0 +1,141 @@
+name: R6.1.2 Vercel Preview
+
+on:
+  push:
+    branches: ["r612-codex-remediation"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      NEXT_PUBLIC_3D_ASSET_SET: r6
+      NEXT_PUBLIC_BRAND_ASSET_SET: stage4
+      DEPLOYMENT_TIER: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          # The reviewed/canonical R6.1.2 source was authored under Python 3.11.
+          # GLB serialization is byte-sensitive, so do not silently move this to 3.12+.
+          python-version: '3.11'
+
+      - name: Runtime version diagnostics
+        run: |
+          node --version
+          npm --version
+          python --version
+
+      - name: Install exact JavaScript dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install deterministic CPU-only R6 tooling
+        run: python -m pip install --disable-pip-version-check trimesh==4.11.1 numpy==2.3.5 Pillow==12.3.0
+
+      - name: Materialize byte-identical uploaded R6.1.2 Manufacturing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          awk '/^H4sI/{capture=1} capture && /^B64$/{exit} capture{print}' .github/workflows/materialize-r612-source.yml > /tmp/author-r61.py.gz.b64
+          test -s /tmp/author-r61.py.gz.b64
+          base64 -d /tmp/author-r61.py.gz.b64 | gunzip > scripts/author-r61-manufacturing-source.py
+          chmod 755 scripts/author-r61-manufacturing-source.py
+          rm -rf assets-source/r6/heroes/manufacturing-line
+          python scripts/author-r61-manufacturing-source.py
+          ACTUAL_SHA=$(sha256sum assets-source/r6/heroes/manufacturing-line/visual-master.glb | awk '{print $1}')
+          echo "Manufacturing visual-master SHA256=$ACTUAL_SHA"
+          test "$ACTUAL_SHA" = "896f4a4c4d1fca72d36b6e76f5c44d74d1b59338f4b5374a25295665af1b4d8e"
+          npm run validate:r61:source
+
+      - name: Generate R6 runtime assets from authoritative source
+        run: npm run assets:r6
+
+      - name: Assert all six R6 heroes and LODs exist
+        env:
+          VERCEL: "1"
+          NEXT_PUBLIC_3D_ASSET_SET: "r6"
+        run: node scripts/assert-r6-runtime-assets.mjs
+
+      - name: R6.1.2 generated-asset gates
+        run: |
+          npm run validate:corporate:r6
+          npm run validate:r6:proxy
+          npm run prove:r6:cpu-fallback
+          node --test tests/r6-assets.test.mjs tests/r6-budgets.test.mjs tests/r6-runtime-contract.test.mjs tests/r612-rendering-contract.test.mjs tests/r612-remediation-contract.test.mjs
+
+      - name: TypeScript gate
+        run: npm run typecheck
+
+      - name: Production build gate
+        env:
+          VERCEL: "1"
+          NEXT_PUBLIC_3D_ASSET_SET: "r6"
+        run: npm run build
+
+      - name: Verify Vercel token
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${VERCEL_TOKEN:-}" || { echo "::error::VERCEL_TOKEN is not configured"; exit 2; }
+          STATUS=$(curl -sS -o /tmp/vercel-user.json -w '%{http_code}' -H "Authorization: Bearer ${VERCEL_TOKEN}" https://api.vercel.com/v2/user)
+          echo "Vercel /v2/user HTTP status: ${STATUS}"
+          test "$STATUS" = "200"
+
+      - name: Normalize Vercel project runtime
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -fsS -X PATCH \
+            "https://api.vercel.com/v9/projects/interactive-3d-real-estate-narrative-r4?teamId=team_GI0H1MJPmSQhzRXjQ1DMbK27" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"nodeVersion":"22.x","autoAssignCustomDomains":true}')
+          printf '%s' "$RESPONSE" > /tmp/vercel-project-update.json
+          node -e 'const p=JSON.parse(require("fs").readFileSync("/tmp/vercel-project-update.json","utf8")); if(p.nodeVersion!=="22.x") throw new Error(`Vercel nodeVersion=${p.nodeVersion}`); console.log(`Vercel project runtime=${p.nodeVersion}`)'
+
+      - name: Link existing Vercel project
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx vercel@latest link --yes --project interactive-3d-real-estate-narrative-r4 --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN"
+
+      - name: Deploy R6.1.2 preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx vercel@latest pull --yes --environment=preview --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN"
+          npx vercel@latest build --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN"
+          npx vercel@latest deploy --prebuilt --yes --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN" 2>&1 | tee vercel-r612-preview.log
+          DEPLOY_URL=$(grep -Eo 'https://[^[:space:]]+\.vercel\.app' vercel-r612-preview.log | tail -n 1)
+          test -n "$DEPLOY_URL"
+          echo "DEPLOY_URL=$DEPLOY_URL" >> "$GITHUB_ENV"
+          echo "### R6.1.2 preview" >> "$GITHUB_STEP_SUMMARY"
+          echo "$DEPLOY_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke deployed preview
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 12 --retry-delay 5 "$DEPLOY_URL/" >/dev/null
+          curl -fsS --retry 12 --retry-delay 5 "$DEPLOY_URL/api/health" >/dev/null
+          curl -fsSI --retry 12 --retry-delay 5 "$DEPLOY_URL/models/r6/hero/integrated-campus/lod0.glb" | grep -E '^HTTP/.* 200'
+          curl -fsSI --retry 12 --retry-delay 5 "$DEPLOY_URL/models/r6/hero/manufacturing-line/lod0.glb" | grep -E '^HTTP/.* 200'
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vercel-r612-preview-log
+          path: |
+            vercel-r612-preview.log
+            artifacts/r6-cpu-fallback-proof.json
+          if-no-files-found: ignore
