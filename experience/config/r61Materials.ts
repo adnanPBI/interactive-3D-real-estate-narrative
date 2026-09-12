@@ -12,7 +12,7 @@ export const r61ManufacturingTextureMaterials = {
 export type R61ManufacturingMaterialName = keyof typeof r61ManufacturingTextureMaterials;
 export type R61TextureKind = "basecolor" | "normal" | "orm";
 
-export const r61MaterialNormalScale: Record<R61ManufacturingMaterialName, number> = {
+export const r61MaterialNormalScale: Record<string, number> = {
   Concrete_Floor: 0.18,
   Concrete_Wall: 0.16,
   Metal_Painted_Charcoal: 0.10,
