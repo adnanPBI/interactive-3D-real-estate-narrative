@@ -8,15 +8,27 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { storyMotion } from "@/experience/config/storyMotion";
+import { finalizeRenderTelemetry, setSceneRenderTelemetry } from "@/experience/systems/renderTelemetry";
 import { useExperienceStore } from "@/lib/experienceStore";
 
+class SceneTelemetryPass extends RenderPass {
+  override render(
+    renderer: THREE.WebGLRenderer,
+    writeBuffer: THREE.WebGLRenderTarget,
+    readBuffer: THREE.WebGLRenderTarget,
+    deltaTime: number,
+    maskActive: boolean,
+  ) {
+    renderer.info.reset();
+    super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+    setSceneRenderTelemetry(renderer.info.render.calls, renderer.info.render.triangles);
+  }
+}
+
 /**
- * R6 output pipeline.
- *
- * Native canvas MSAA remains enabled, but the final image also passes through
- * SMAA. This is intentionally a small post stack: the project values stable
- * industrial edges and predictable laptop performance over expensive cinematic
- * effects such as SSR, DOF or motion blur.
+ * R6 output pipeline. Native canvas MSAA remains enabled, while SMAA stabilizes
+ * the final industrial silhouette. Renderer-info auto reset is disabled so the
+ * governor can distinguish scene work from post-processing work per frame.
  */
 export function R6PostFX({ quality }: { quality: "high" | "medium" }) {
   const gl = useThree((state) => state.gl);
@@ -37,11 +49,20 @@ export function R6PostFX({ quality }: { quality: "high" | "medium" }) {
     target.texture.colorSpace = THREE.SRGBColorSpace;
 
     const next = new EffectComposer(gl, target);
-    next.addPass(new RenderPass(scene, camera));
-    next.addPass(new SMAAPass(1, 1));
+    next.addPass(new SceneTelemetryPass(scene, camera));
+    next.addPass(new SMAAPass());
     next.addPass(new OutputPass());
     return next;
   }, [camera, gl, quality, scene]);
+
+  useEffect(() => {
+    const previousAutoReset = gl.info.autoReset;
+    gl.info.autoReset = false;
+    return () => {
+      gl.info.autoReset = previousAutoReset;
+      gl.info.reset();
+    };
+  }, [gl]);
 
   useEffect(() => {
     const dpr = gl.getPixelRatio();
@@ -58,7 +79,10 @@ export function R6PostFX({ quality }: { quality: "high" | "medium" }) {
   // Priority 1 takes ownership of rendering from R3F's default renderer.
   useFrame(() => {
     if (postFx === "off") {
+      gl.info.reset();
       gl.render(scene, camera);
+      setSceneRenderTelemetry(gl.info.render.calls, gl.info.render.triangles);
+      finalizeRenderTelemetry(gl.info.render.calls, gl.info.render.triangles);
       return;
     }
     const dpr = gl.getPixelRatio();
@@ -68,6 +92,7 @@ export function R6PostFX({ quality }: { quality: "high" | "medium" }) {
       lastDpr.current = dpr;
     }
     composer.render();
+    finalizeRenderTelemetry(gl.info.render.calls, gl.info.render.triangles);
   }, 1);
 
   return null;
