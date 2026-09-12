@@ -7,9 +7,9 @@ on:
     branches: [main]
 
 jobs:
-  static-and-build:
+  code-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       DEPLOYMENT_TIER: staging
       BUILD_ID: ${{ github.sha }}
@@ -22,37 +22,60 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Require reviewed lockfile
+      - name: Require reviewed lockfile dependency graph
         run: node scripts/check-lockfile.mjs
       - run: npm ci --no-audit --no-fund
-      - name: Install deterministic CPU-only asset validation dependencies
-        run: pip install trimesh==4.11.1 numpy==2.3.5 Pillow==12.3.0
-      - name: Validate R6 corporate asset contract
-        run: npm run validate:corporate:r6
-      - name: Run R6 regression tests
-        run: npm test
-      - name: Prove genuine LOD2 to proxy provenance
-        run: npm run validate:r6:proxy
-      - name: Re-prove deterministic CPU fallback generation
-        run: npm run prove:r6:cpu-fallback
       - run: npm run typecheck
       - run: npm run build
+      - name: Run source/runtime regression contracts
+        run: npm test
       - name: Save build evidence marker
         run: |
           mkdir -p artifacts/build
           printf 'commit=%s\nnode=%s\ncompleted=%s\n' "$GITHUB_SHA" "$(node --version)" "$(date -u +%FT%TZ)" > artifacts/build/next-build.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: r612-build-evidence
+          name: r612-code-build-evidence
+          path: artifacts/build/next-build.txt
+
+  release-assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_3D_ASSET_SET: r6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --no-audit --no-fund
+      - name: Install deterministic CPU-only asset validation dependencies
+        run: pip install trimesh==4.11.1 numpy==2.3.5 Pillow==12.3.0
+      - name: Require authoritative R6.1 Manufacturing visual master
+        run: npm run validate:r61:source
+      - name: Build normalized R6.1 assets only from authoritative sources
+        run: npm run assets:r6
+      - name: Validate R6 corporate asset contract
+        run: npm run validate:corporate:r6
+      - name: Prove genuine LOD2 to proxy provenance
+        run: npm run validate:r6:proxy
+      - name: Re-prove deterministic CPU fallback generation
+        run: npm run prove:r6:cpu-fallback
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r612-release-asset-evidence
           path: |
-            artifacts/build/next-build.txt
             artifacts/r6-cpu-fallback-proof.json
+            public/models/r6/manifest.json
+            public/models/r6/proxy-reduction.json
+          if-no-files-found: ignore
 
   browser-acceptance:
-    needs: static-and-build
+    needs: [code-build, release-assets]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
