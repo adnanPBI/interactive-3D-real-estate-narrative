@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 
 export type Quality = "high" | "medium" | "fallback";
-type NavigatorWithMemory = Navigator & { deviceMemory?: number };
+type NavigatorWithHints = Navigator & {
+  deviceMemory?: number;
+  connection?: { saveData?: boolean; effectiveType?: string };
+};
 
 function detectRenderer() {
   try {
@@ -25,17 +28,19 @@ function chooseQuality(): Quality {
 
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     || document.documentElement.dataset.motion === "reduced";
-  const nav = navigator as NavigatorWithMemory;
+  const nav = navigator as NavigatorWithHints;
   const cores = nav.hardwareConcurrency ?? 8;
   const memory = nav.deviceMemory ?? 8;
+  const saveData = Boolean(nav.connection?.saveData);
+  const slowConnection = /(^|-)2g$/.test(nav.connection?.effectiveType ?? "");
   const { webgl, renderer } = detectRenderer();
   const integratedIntel = /Intel.*(?:UHD|Iris)|(?:UHD|Iris).*Intel/i.test(renderer);
   const weakRenderer = /SwiftShader|llvmpipe|Software/i.test(renderer);
 
-  // Reduced-motion means no cinematic camera motion at all: use the premium
-  // static six-frame DOM/fallback presentation instead of merely slowing WebGL.
   if (reduced || !webgl || weakRenderer || cores <= 2 || memory <= 2) return "fallback";
-  if (integratedIntel || cores <= 6 || memory <= 4 || window.innerWidth < 820) return "medium";
+  // Claude scaffold's Save-Data/network hint is useful here: it chooses smaller
+  // R6 LOD payloads without changing the narrative interaction.
+  if (saveData || slowConnection || integratedIntel || cores <= 6 || memory <= 4 || window.innerWidth < 820) return "medium";
   return "high";
 }
 

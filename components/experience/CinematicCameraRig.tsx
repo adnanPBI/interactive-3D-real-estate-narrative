@@ -63,13 +63,13 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
     const light = sun.current;
     if (!light) return;
     light.castShadow = true;
-    const shadowSize = quality === "high" ? 2048 : 1024;
+    const shadowSize = storyMotion.quality[quality].shadowMapSize;
     light.shadow.mapSize.set(shadowSize, shadowSize);
     light.shadow.bias = -0.00018;
     light.shadow.normalBias = quality === "high" ? 0.018 : 0.026;
     light.shadow.radius = quality === "high" ? 1.35 : 1.0;
     const camera = light.shadow.camera as THREE.OrthographicCamera;
-    const extent = quality === "high" ? 16 : 14;
+    const extent = quality === "high" ? 14.5 : 12.5;
     camera.left = -extent;
     camera.right = extent;
     camera.top = extent;

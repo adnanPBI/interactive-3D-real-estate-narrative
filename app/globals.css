@@ -701,3 +701,29 @@ html[data-motion="reduced"] .story-chapter, html[data-motion="reduced"] .chapter
   .story-kicker { font-size:.62rem; }
   .menu-overlay__links span { font-size:clamp(2rem,11vw,3.4rem); }
 }
+
+/* R6 composition safety: reserve a strict editorial copy lane on desktop. */
+@media (min-width:1101px) {
+  .story-copy, .story-chapter[data-copy-align="right"] .story-copy {
+    width:min(470px,31.5vw);
+    max-width:470px;
+  }
+  .story-copy h1, .story-copy h2 {
+    max-width:10.7ch;
+    font-size:clamp(2.75rem,4.65vw,4.55rem);
+    line-height:1.015;
+    letter-spacing:-.032em;
+  }
+  .story-copy p, .story-chapter[data-copy-align="right"] .story-copy p {
+    max-width:36ch;
+    font-size:clamp(.96rem,1.08vw,1.12rem);
+    line-height:1.58;
+  }
+}
+.experience-fallback--r6 { background:var(--corp-paper); }
+.experience-fallback--r6 .fallback-scene { background-size:cover; background-position:center; }
+
+/* R6.1.2 patch: accessible overlay close/focus/scroll containment. */
+.menu-overlay { overflow:auto; overscroll-behavior:contain; }
+.menu-overlay__close { position:sticky; top:0; justify-self:end; z-index:2; border:1px solid var(--corp-line); background:#fff; color:inherit; padding:10px 14px; cursor:pointer; }
+body[data-menu-open="true"] .site-header { z-index:100; }

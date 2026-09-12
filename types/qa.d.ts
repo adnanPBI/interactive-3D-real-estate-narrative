@@ -11,6 +11,8 @@ declare global {
         dpr: number;
         chapter: number;
         quality: string;
+        lod?: string;
+        postFx?: string;
         calls: number;
         triangles: number;
         geometries: number;
