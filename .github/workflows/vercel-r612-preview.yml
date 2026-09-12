@@ -1,0 +1,66 @@
+name: R6.1.2 Vercel Preview
+
+on:
+  push:
+    branches: ["r612-codex-remediation"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci --no-audit --no-fund
+      - name: TypeScript gate
+        run: npm run typecheck
+      - name: Production build gate
+        env:
+          VERCEL: "1"
+          NEXT_PUBLIC_3D_ASSET_SET: "r6"
+        run: npm run build
+      - name: Verify Vercel token
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${VERCEL_TOKEN:-}" || { echo "::error::VERCEL_TOKEN is not configured"; exit 2; }
+          STATUS=$(curl -sS -o /tmp/vercel-user.json -w '%{http_code}' -H "Authorization: Bearer ${VERCEL_TOKEN}" https://api.vercel.com/v2/user)
+          echo "Vercel /v2/user HTTP status: ${STATUS}"
+          test "$STATUS" = "200"
+      - name: Link existing Vercel project
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npx vercel@latest link --yes --project interactive-3d-real-estate-narrative-r4 --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN"
+      - name: Deploy preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx vercel@latest pull --yes --environment=preview --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN"
+          npx vercel@latest build --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN"
+          DEPLOY_URL=$(npx vercel@latest deploy --prebuilt --yes --scope adnans-projects-1993fd6c --token "$VERCEL_TOKEN" 2>&1 | tee vercel-r612-preview.log | tail -n 1)
+          echo "DEPLOY_URL=$DEPLOY_URL" >> "$GITHUB_ENV"
+          echo "### R6.1.2 preview" >> "$GITHUB_STEP_SUMMARY"
+          echo "$DEPLOY_URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: Smoke preview
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_URL:-}"
+          curl -fsS --retry 12 --retry-delay 5 "$DEPLOY_URL/" >/dev/null
+          curl -fsS --retry 12 --retry-delay 5 "$DEPLOY_URL/api/health" >/dev/null
+      - name: Upload preview deployment log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vercel-r612-preview-log
+          path: vercel-r612-preview.log
+          if-no-files-found: ignore
