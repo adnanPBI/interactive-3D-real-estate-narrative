@@ -50,10 +50,23 @@ jobs:
           node-version-file: .nvmrc
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
       - run: npm ci --no-audit --no-fund
       - name: Install deterministic CPU-only asset validation dependencies
-        run: pip install trimesh==4.11.1 numpy==2.3.5 Pillow==12.3.0
+        run: python -m pip install --disable-pip-version-check trimesh==4.11.1 numpy==2.3.5 Pillow==12.3.0
+      - name: Materialize byte-identical reviewed Manufacturing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          awk '/^H4sI/{capture=1} capture && /^B64$/{exit} capture{print}' .github/workflows/materialize-r612-source.yml > /tmp/author-r61.py.gz.b64
+          test -s /tmp/author-r61.py.gz.b64
+          base64 -d /tmp/author-r61.py.gz.b64 | gunzip > scripts/author-r61-manufacturing-source.py
+          chmod 755 scripts/author-r61-manufacturing-source.py
+          rm -rf assets-source/r6/heroes/manufacturing-line
+          python scripts/author-r61-manufacturing-source.py
+          ACTUAL_SHA=$(sha256sum assets-source/r6/heroes/manufacturing-line/visual-master.glb | awk '{print $1}')
+          echo "Manufacturing visual-master SHA256=$ACTUAL_SHA"
+          test "$ACTUAL_SHA" = "896f4a4c4d1fca72d36b6e76f5c44d74d1b59338f4b5374a25295665af1b4d8e"
       - name: Require authoritative R6.1 Manufacturing visual master
         run: npm run validate:r61:source
       - name: Build normalized R6.1 assets only from authoritative sources
@@ -100,7 +113,7 @@ jobs:
           node-version-file: .nvmrc
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
       - run: npm ci --no-audit --no-fund
       - run: pip install -r requirements-acceptance.txt
       - run: playwright install --with-deps chromium
