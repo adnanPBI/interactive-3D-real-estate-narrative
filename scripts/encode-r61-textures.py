@@ -40,8 +40,10 @@ def inspect(path: Path)->dict[str,int|bool]:
     return {'vkFormat':vk_format,'width':width,'height':height,'levels':levels,'supercompressionScheme':supercompression,'basisUniversal':vk_format==0}
 
 def encode_toktx(toktx: str, source: Path, target: Path, mode: str, kind: str):
-    target.parent.mkdir(parents=True,exist_ok=True); common=[toktx,'--t2','--genmipmap','--threads','1']
-    color_space=['--assign_oetf','srgb','--assign_primaries','bt709'] if kind=='basecolor' else ['--assign_oetf','linear','--assign_primaries','bt709']; common+=color_space
+    target.parent.mkdir(parents=True,exist_ok=True)
+    common=[toktx,"--t2","--genmipmap","--threads","1"]
+    color_space=["--assign_oetf", "srgb", "--assign_primaries", "bt709"] if kind=='basecolor' else ["--assign_oetf", "linear", "--assign_primaries", "bt709"]
+    common+=color_space
     if mode=='ETC1S': args=common+['--bcmp','--clevel','5','--qlevel','192']
     elif mode=='UASTC':
         args=common+['--uastc','2','--zcmp','10']
