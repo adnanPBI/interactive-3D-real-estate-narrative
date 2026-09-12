@@ -16,12 +16,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Materialize staged R6 source upgrade
+      - name: Materialize missing staged R6 baseline files without overwriting remediation
         run: |
           set -euo pipefail
           if compgen -G "scripts/r6-source.patch.gz.b64.part-*" > /dev/null; then
             cat scripts/r6-source.patch.gz.b64.part-* | base64 --decode | gzip --decompress > /tmp/r6-source.patch
-            git apply --3way --exclude=.github/workflows/vercel-r4-deploy.yml /tmp/r6-source.patch
+            git apply \
+              --exclude=.github/workflows/vercel-r4-deploy.yml \
+              --exclude=components/experience/AssetPreloader.tsx \
+              --exclude=components/experience/ExperienceCanvas.tsx \
+              --exclude=components/experience/HomeExperience.tsx \
+              --exclude=components/experience/LaptopBenchmarkPanel.tsx \
+              --exclude=components/experience/PerformanceGovernor.tsx \
+              --exclude=components/experience/StoryWorld.tsx \
+              --exclude=experience/config/scenes.ts \
+              --exclude=package.json \
+              /tmp/r6-source.patch
             rm scripts/r6-source.patch.gz.b64.part-*
           else
             echo "R6 source upgrade payload is already materialized."
@@ -37,6 +47,8 @@ jobs:
           test -f scripts/validate-r6-proxy-provenance.py
           test -f scripts/prove-r6-cpu-fallback.py
           test -f scripts/validate-corporate-r6.mjs
+          test -f scripts/validate-r61-source.py
+          test -f scripts/install-ktx-tools.sh
           test -f tests/r6-assets.test.mjs
           test -f tests/r612-rendering-contract.test.mjs
           grep -q 'R6.1.2 patch: accessible overlay' app/globals.css
