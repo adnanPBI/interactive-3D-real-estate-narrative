@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { proceduralChapterProfiles } from "@/experience/config/proceduralWorld";
 import { proceduralSample, resolveProceduralRuntime } from "@/experience/systems/proceduralRuntime";
@@ -10,6 +10,7 @@ import { useExperienceStore } from "@/lib/experienceStore";
 const dummy = new THREE.Object3D();
 const turbineMaterial = new THREE.MeshStandardMaterial({ color: "#d5d7d4", roughness: 0.58, metalness: 0.42 });
 const rotorMaterial = new THREE.MeshStandardMaterial({ color: "#e5e6e2", roughness: 0.52, metalness: 0.3 });
+const FRONT_WRAP_Z = 12;
 
 type Slot = {
   z: number;
@@ -68,10 +69,25 @@ function buildLayout(seed: string, chapter: number, count: number, segmentLength
   return layout;
 }
 
-function writeMatrix(mesh: THREE.InstancedMesh | null, slots: Slot[], kind: "structure" | "solar" | "traffic" | "beacon") {
+function wrapZ(baseZ: number, offset: number, loopLength: number) {
+  if (loopLength <= 0) return baseZ;
+  let z = baseZ + offset;
+  while (z > FRONT_WRAP_Z) z -= loopLength;
+  while (z <= FRONT_WRAP_Z - loopLength) z += loopLength;
+  return z;
+}
+
+function writeMatrix(
+  mesh: THREE.InstancedMesh | null,
+  slots: Slot[],
+  kind: "structure" | "solar" | "traffic" | "beacon",
+  offset = 0,
+  loopLength = Number.POSITIVE_INFINITY,
+) {
   if (!mesh) return;
+  mesh.count = slots.length;
   slots.forEach((slot, index) => {
-    dummy.position.set(slot.x, -1.48, slot.z);
+    dummy.position.set(slot.x, -1.48, Number.isFinite(loopLength) ? wrapZ(slot.z, offset, loopLength) : slot.z);
     dummy.rotation.set(0, slot.yaw, 0);
     if (kind === "structure") {
       const width = (2.2 + slot.variant * 2.1) * slot.scale;
@@ -94,18 +110,33 @@ function writeMatrix(mesh: THREE.InstancedMesh | null, slots: Slot[], kind: "str
     mesh.setMatrixAt(index, dummy.matrix);
   });
   mesh.instanceMatrix.needsUpdate = true;
-  mesh.computeBoundingSphere();
 }
 
-function Turbine({ slot, phase, wind, shadows }: { slot: Slot; phase: number; wind: number; shadows: boolean }) {
+function Turbine({
+  slot,
+  phase,
+  wind,
+  shadows,
+  offsetRef,
+  loopLength,
+}: {
+  slot: Slot;
+  phase: number;
+  wind: number;
+  shadows: boolean;
+  offsetRef: MutableRefObject<number>;
+  loopLength: number;
+}) {
+  const root = useRef<THREE.Group>(null);
   const rotor = useRef<THREE.Group>(null);
   useFrame((_, delta) => {
+    if (root.current) root.current.position.z = wrapZ(slot.z, offsetRef.current, loopLength);
     if (rotor.current) rotor.current.rotation.z += delta * (0.42 + wind * 0.72 + phase * 0.08);
   });
 
   const height = 3.7 * slot.scale;
   return (
-    <group position={[slot.x, -1.48, slot.z]} scale={slot.scale}>
+    <group ref={root} position={[slot.x, -1.48, slot.z]} scale={slot.scale}>
       <mesh position={[0, height * 0.5, 0]} material={turbineMaterial} castShadow={shadows} receiveShadow={false}>
         <cylinderGeometry args={[0.08, 0.16, height, 8]} />
       </mesh>
@@ -131,8 +162,6 @@ export function ProceduralWorld({ quality }: { quality: "high" | "medium" }) {
   const profile = proceduralChapterProfiles[activeChapter] ?? proceduralChapterProfiles[0];
   const reducedMotion = typeof document !== "undefined" && document.documentElement.dataset.motion === "reduced";
   const runtime = resolveProceduralRuntime(profile, runtimeConfig, quality, reducedMotion);
-  const root = useRef<THREE.Group>(null);
-  const trafficRoot = useRef<THREE.Group>(null);
   const structures = useRef<THREE.InstancedMesh>(null);
   const solar = useRef<THREE.InstancedMesh>(null);
   const traffic = useRef<THREE.InstancedMesh>(null);
@@ -148,21 +177,26 @@ export function ProceduralWorld({ quality }: { quality: "high" | "medium" }) {
   );
 
   useEffect(() => {
-    writeMatrix(structures.current, layout.structures, "structure");
-    writeMatrix(solar.current, layout.solar, "solar");
-    writeMatrix(traffic.current, layout.traffic, "traffic");
-    writeMatrix(beacons.current, layout.beacons, "beacon");
-  }, [layout]);
+    runnerDistance.current = 0;
+    trafficDistance.current = 0;
+    writeMatrix(structures.current, layout.structures, "structure", 0, loopLength);
+    writeMatrix(solar.current, layout.solar, "solar", 0, loopLength);
+    writeMatrix(traffic.current, layout.traffic, "traffic", 0, loopLength);
+    writeMatrix(beacons.current, layout.beacons, "beacon", 0, loopLength);
+  }, [layout, loopLength]);
 
   useFrame((state, delta) => {
     if (!runtime.enabled || runtime.runnerMode === "off" || reducedMotion) return;
     const boundedDelta = Math.min(delta, 0.1);
     runnerDistance.current = (runnerDistance.current + boundedDelta * runtime.speed * 3.2) % loopLength;
     trafficDistance.current = (trafficDistance.current + boundedDelta * (3.8 + runtime.traffic * 2.5)) % loopLength;
-    if (root.current) root.current.position.z = runnerDistance.current;
-    if (trafficRoot.current) trafficRoot.current.position.z = trafficDistance.current;
 
-    // Animated turbines are shadow casters, so invalidate only while they actually move.
+    writeMatrix(structures.current, layout.structures, "structure", runnerDistance.current, loopLength);
+    writeMatrix(solar.current, layout.solar, "solar", runnerDistance.current, loopLength);
+    writeMatrix(beacons.current, layout.beacons, "beacon", runnerDistance.current, loopLength);
+    writeMatrix(traffic.current, layout.traffic, "traffic", trafficDistance.current, loopLength);
+
+    // Animated turbine blades cast dynamic shadows only on the high tier.
     if (layout.turbines.length > 0 && runtime.wind > 0 && state.gl.shadowMap.enabled) state.gl.shadowMap.needsUpdate = true;
   });
 
@@ -174,30 +208,34 @@ export function ProceduralWorld({ quality }: { quality: "high" | "medium" }) {
 
   return (
     <group name="r612-procedural-world" userData={{ procedural: true, seed: runtime.seed, chapter: profile.id }}>
-      <group ref={root}>
-        <instancedMesh ref={structures} args={[undefined, undefined, Math.max(1, layout.structures.length)]} castShadow={shadows} receiveShadow>
-          <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color={profile.palette.structure} roughness={0.78} metalness={0.1} />
-        </instancedMesh>
-        <instancedMesh ref={solar} args={[undefined, undefined, Math.max(1, layout.solar.length)]} castShadow={false} receiveShadow={false}>
-          <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color={profile.palette.solar} roughness={0.28} metalness={0.54} emissive={dusk ? profile.palette.accent : "#000000"} emissiveIntensity={dusk ? 0.06 : 0} />
-        </instancedMesh>
-        <instancedMesh ref={beacons} args={[undefined, undefined, Math.max(1, layout.beacons.length)]} castShadow={false} receiveShadow={false}>
-          <sphereGeometry args={[1, 8, 6]} />
-          <meshStandardMaterial color={profile.palette.accent} emissive={profile.palette.accent} emissiveIntensity={(dusk ? 2.1 : 0.85) * hazeFactor} roughness={0.38} metalness={0.15} />
-        </instancedMesh>
-        {layout.turbines.map((slot, index) => (
-          <Turbine key={`${activeChapter}-${index}`} slot={slot} phase={slot.variant} wind={runtime.wind} shadows={shadows} />
-        ))}
-      </group>
+      <instancedMesh ref={structures} args={[undefined, undefined, Math.max(1, layout.structures.length)]} visible={layout.structures.length > 0} frustumCulled={false} castShadow={shadows} receiveShadow>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color={profile.palette.structure} roughness={0.78} metalness={0.1} />
+      </instancedMesh>
+      <instancedMesh ref={solar} args={[undefined, undefined, Math.max(1, layout.solar.length)]} visible={layout.solar.length > 0} frustumCulled={false} castShadow={false} receiveShadow={false}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color={profile.palette.solar} roughness={0.28} metalness={0.54} emissive={dusk ? profile.palette.accent : "#000000"} emissiveIntensity={dusk ? 0.06 : 0} />
+      </instancedMesh>
+      <instancedMesh ref={beacons} args={[undefined, undefined, Math.max(1, layout.beacons.length)]} visible={layout.beacons.length > 0} frustumCulled={false} castShadow={false} receiveShadow={false}>
+        <sphereGeometry args={[1, 8, 6]} />
+        <meshStandardMaterial color={profile.palette.accent} emissive={profile.palette.accent} emissiveIntensity={(dusk ? 2.1 : 0.85) * hazeFactor} roughness={0.38} metalness={0.15} />
+      </instancedMesh>
+      {layout.turbines.map((slot, index) => (
+        <Turbine
+          key={`${activeChapter}-${index}`}
+          slot={slot}
+          phase={slot.variant}
+          wind={runtime.wind}
+          shadows={shadows}
+          offsetRef={runnerDistance}
+          loopLength={loopLength}
+        />
+      ))}
 
-      <group ref={trafficRoot}>
-        <instancedMesh ref={traffic} args={[undefined, undefined, Math.max(1, layout.traffic.length)]} castShadow={false} receiveShadow={false}>
-          <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color={profile.palette.service} roughness={0.5} metalness={0.42} emissive={dusk ? "#ffd7a0" : "#000000"} emissiveIntensity={dusk ? 0.08 : 0} />
-        </instancedMesh>
-      </group>
+      <instancedMesh ref={traffic} args={[undefined, undefined, Math.max(1, layout.traffic.length)]} visible={layout.traffic.length > 0} frustumCulled={false} castShadow={false} receiveShadow={false}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color={profile.palette.service} roughness={0.5} metalness={0.42} emissive={dusk ? "#ffd7a0" : "#000000"} emissiveIntensity={dusk ? 0.08 : 0} />
+      </instancedMesh>
 
       <mesh position={[0, -1.505, -loopLength * 0.45]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={false}>
         <planeGeometry args={[4.8, loopLength * 1.35]} />
