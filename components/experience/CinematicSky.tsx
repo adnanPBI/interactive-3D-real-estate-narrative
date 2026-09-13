@@ -41,6 +41,7 @@ const topA = new THREE.Color();
 const topB = new THREE.Color();
 const horizonA = new THREE.Color();
 const horizonB = new THREE.Color();
+const animatedSunDir = new THREE.Vector3();
 
 /** One-draw-call atmospheric sky. It provides cinematic depth without HDR payloads
  * or post-processing and remains cheap on Intel integrated graphics. */
@@ -54,12 +55,13 @@ export function CinematicSky() {
     uSunStrength: { value: 0.72 },
   }), []);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (!material.current) return;
     const timeline = sceneTimeline(useExperienceStore.getState().progress);
     const a = sceneDefinitions[timeline.from];
     const b = sceneDefinitions[timeline.to];
     const t = timeline.local * timeline.local * (3 - 2 * timeline.local);
+    const reduced = typeof document !== "undefined" && document.documentElement.dataset.motion === "reduced";
 
     // Background tokens inform the atmosphere while deliberately staying warmer
     // and more expansive than the flat DOM palette.
@@ -71,6 +73,23 @@ export function CinematicSky() {
     const alpha = 1 - Math.exp(-delta * 2.8);
     material.current.uniforms.uHorizon.value.lerp(horizonA.lerp(horizonB, t), alpha);
     material.current.uniforms.uTop.value.lerp(topA.lerp(topB, t), alpha);
+
+    // The approved sky palette remains intact. Only the procedural sun lobe drifts
+    // slowly so highlights and the directional key feel alive rather than frozen.
+    const elapsed = reduced ? 0 : state.clock.elapsedTime;
+    animatedSunDir.set(
+      -0.72 + Math.sin(elapsed * 0.055) * 0.045,
+      0.19 + Math.sin(elapsed * 0.041 + 0.8) * 0.018,
+      -0.66 + Math.cos(elapsed * 0.055) * 0.042,
+    ).normalize();
+    material.current.uniforms.uSunDir.value.lerp(animatedSunDir, alpha * 0.72);
+    const desiredStrength = 0.72 + (reduced ? 0 : Math.sin(elapsed * 0.12) * 0.025);
+    material.current.uniforms.uSunStrength.value = THREE.MathUtils.damp(
+      material.current.uniforms.uSunStrength.value,
+      desiredStrength,
+      2.2,
+      delta,
+    );
   });
 
   return (
