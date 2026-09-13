@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { modelTransform, type SceneDefinition } from "@/experience/config/scenes";
 import { r6HeroUrl, type R6HeroId } from "@/experience/config/r6Assets";
+import { r612HeroMotion } from "@/experience/config/r612Motion";
 import {
   r61GlassMaterials,
   r61MaterialNormalScale,
@@ -16,6 +17,7 @@ import { useSceneAsset } from "./useSceneAsset";
 import { useR6HeroTextures } from "./useR6HeroTextures";
 import { useR61MaterialTextures, type R61MaterialTextures } from "./useR61MaterialTextures";
 import { R6InstancedSolarField, R6InstancedTurbines, R6InstancedVegetation } from "./InstancedInfrastructure";
+import { R6HeroAmbientMotion } from "./R6AmbientMotion";
 
 type Binding = { material: THREE.MeshStandardMaterial; glass: boolean };
 
@@ -118,6 +120,7 @@ export function HeroAsset({
   const premiumTextures = useR61MaterialTextures(hero, quality);
   const anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), quality === "high" ? 8 : 4);
   const authored = modelTransform(definition, width);
+  const motion = r612HeroMotion[hero];
 
   const { instance, bindings } = useMemo(() => {
     if (!gltf) return { instance: null, bindings: [] as Binding[] };
@@ -182,12 +185,21 @@ export function HeroAsset({
   }, [assetUrl, hero, instance, lod]);
   useEffect(() => () => { for (const { material } of bindings) material.dispose(); }, [bindings]);
 
-  return <group ref={root} position={authored.position as [number, number, number]} rotation={authored.rotation as [number, number, number]} scale={authored.scale}>
-    {instance ? <primitive object={instance} /> : failed ? <mesh position={[0, 1, 0]}><boxGeometry args={[2.4, 1.4, 1.8]} /><meshStandardMaterial color="#4a4f4c" wireframe /></mesh> : null}
-    {hero === "integrated-campus" && <><R6InstancedSolarField compact /><R6InstancedTurbines count={2} quality={quality} /><R6InstancedVegetation count={14} /></>}
-    {hero === "substation-bess" && <><R6InstancedSolarField /><R6InstancedTurbines count={2} quality={quality} /></>}
-    {hero === "data-center-cooling" && <R6InstancedVegetation count={12} />}
-    {hero === "recycling-intake" && <R6InstancedVegetation count={12} />}
-    {hero === "connected-campus" && <><R6InstancedSolarField compact /><R6InstancedTurbines count={1} quality={quality} /><R6InstancedVegetation count={12} /></>}
-  </group>;
+  return (
+    <group
+      ref={root}
+      position={authored.position as [number, number, number]}
+      rotation={authored.rotation as [number, number, number]}
+      scale={authored.scale}
+    >
+      {/* The authored GLB primitive remains byte-for-byte unchanged. Runtime motion is additive. */}
+      {instance ? <primitive object={instance} /> : failed ? <mesh position={[0, 1, 0]}><boxGeometry args={[2.4, 1.4, 1.8]} /><meshStandardMaterial color="#4a4f4c" wireframe /></mesh> : null}
+      <R6HeroAmbientMotion hero={hero} accent={definition.accent} quality={quality} />
+      {hero === "integrated-campus" && <><R6InstancedSolarField compact /><R6InstancedTurbines count={2} quality={quality} wind={motion.wind} /><R6InstancedVegetation count={14} wind={motion.wind} /></>}
+      {hero === "substation-bess" && <><R6InstancedSolarField /><R6InstancedTurbines count={2} quality={quality} wind={motion.wind} /></>}
+      {hero === "data-center-cooling" && <R6InstancedVegetation count={12} wind={motion.wind} />}
+      {hero === "recycling-intake" && <R6InstancedVegetation count={12} wind={motion.wind} />}
+      {hero === "connected-campus" && <><R6InstancedSolarField compact /><R6InstancedTurbines count={1} quality={quality} wind={motion.wind} /><R6InstancedVegetation count={12} wind={motion.wind} /></>}
+    </group>
+  );
 }
