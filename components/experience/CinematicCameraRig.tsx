@@ -3,8 +3,10 @@
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import { proceduralChapterProfiles } from "@/experience/config/proceduralWorld";
 import { cameraShot, sceneDefinitions, sceneTimeline, viewportClass } from "@/experience/config/scenes";
 import { storyMotion } from "@/experience/config/storyMotion";
+import { resolveProceduralRuntime } from "@/experience/systems/proceduralRuntime";
 import { useExperienceStore } from "@/lib/experienceStore";
 
 const desired = new THREE.Vector3();
@@ -14,6 +16,7 @@ const lightB = new THREE.Vector3();
 const accentA = new THREE.Color();
 const accentB = new THREE.Color();
 const warm = new THREE.Color("#fff7e8");
+const duskWarm = new THREE.Color("#ffd2a3");
 const bgA = new THREE.Color();
 const bgB = new THREE.Color();
 const bg = new THREE.Color();
@@ -21,6 +24,16 @@ const SHADOW_POSITION_EPSILON = 0.004;
 
 function smoothStep(value: number) {
   return value * value * (3 - 2 * value);
+}
+
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function daylightForHour(hour: number) {
+  // Smooth daylight envelope: low at midnight, full through the corporate daytime window.
+  const angle = ((hour - 6) / 12) * Math.PI;
+  return clamp01(Math.sin(angle));
 }
 
 /** Allocation-free cardinal/Catmull-Rom scalar interpolation. */
@@ -57,6 +70,9 @@ function setSplineVector(target: THREE.Vector3, width: number, from: number, t: 
  * the master timeline progress; frame-time damping only removes display jitter.
  * Shadow-map invalidation is bounded by actual sun-position movement because the
  * renderer has shadowMap.autoUpdate disabled for R6.
+ *
+ * R6.1.2 procedural extension: time/weather tune the authored grade rather than
+ * replacing it. This preserves chapter art direction while making the world live.
  */
 export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) {
   const sun = useRef<THREE.DirectionalLight>(null);
@@ -85,7 +101,8 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
   }, [quality]);
 
   useFrame((state, delta) => {
-    const progress = useExperienceStore.getState().progress;
+    const store = useExperienceStore.getState();
+    const progress = store.progress;
     const timeline = sceneTimeline(progress);
     const a = sceneDefinitions[timeline.from];
     const b = sceneDefinitions[timeline.to];
@@ -93,6 +110,13 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
     const viewport = viewportClass(state.size.width);
     const parallax = storyMotion.pointerParallax[viewport];
     const reduced = typeof document !== "undefined" && document.documentElement.dataset.motion === "reduced";
+    const proceduralProfile = proceduralChapterProfiles[store.activeChapter] ?? proceduralChapterProfiles[0];
+    const procedural = resolveProceduralRuntime(proceduralProfile, store.procedural, quality, reduced);
+    const daylight = daylightForHour(procedural.timeOfDay);
+    const weatherLight = procedural.weather === "haze" ? 0.9 : procedural.weather === "dusk" ? 0.84 : 1;
+    const proceduralKey = (0.7 + daylight * 0.3) * weatherLight;
+    const proceduralRim = procedural.weather === "dusk" ? 1.18 : procedural.weather === "haze" ? 1.08 : 1;
+    const fogScale = procedural.weather === "haze" ? 0.82 : procedural.weather === "dusk" ? 0.92 : 1;
 
     setSplineVector(desired, state.size.width, timeline.from, t, "position");
     const segmentA = shotAt(timeline.from, state.size.width).position[0];
@@ -136,13 +160,14 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
       }
       sun.current.intensity = THREE.MathUtils.damp(
         sun.current.intensity,
-        THREE.MathUtils.lerp(a.keyIntensity, b.keyIntensity, t) * (quality === "high" ? 1 : 0.9),
+        THREE.MathUtils.lerp(a.keyIntensity, b.keyIntensity, t) * (quality === "high" ? 1 : 0.9) * proceduralKey,
         storyMotion.lightDamping,
         delta,
       );
       accentA.set(a.accent);
       accentB.set(b.accent);
       sun.current.color.copy(accentA).lerp(accentB, t).lerp(warm, 0.86);
+      if (procedural.weather === "dusk" || daylight < 0.45) sun.current.color.lerp(duskWarm, 0.16 + (1 - daylight) * 0.12);
     }
 
     if (rim.current) {
@@ -151,7 +176,7 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
       rim.current.color.copy(accentA).lerp(accentB, t);
       rim.current.intensity = THREE.MathUtils.damp(
         rim.current.intensity,
-        THREE.MathUtils.lerp(a.rimIntensity, b.rimIntensity, t) * (quality === "high" ? 1 : 0.72),
+        THREE.MathUtils.lerp(a.rimIntensity, b.rimIntensity, t) * (quality === "high" ? 1 : 0.72) * proceduralRim,
         storyMotion.lightDamping,
         delta,
       );
@@ -160,10 +185,11 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
     bgA.set(a.background);
     bgB.set(b.background);
     bg.copy(bgA).lerp(bgB, t);
+    if (procedural.weather === "dusk") bg.lerp(duskWarm, 0.055);
     if (state.scene.background instanceof THREE.Color) state.scene.background.lerp(bg, 1 - Math.exp(-delta * 4.2));
     if (state.scene.fog instanceof THREE.Fog) {
-      state.scene.fog.near = THREE.MathUtils.damp(state.scene.fog.near, THREE.MathUtils.lerp(a.fog[0], b.fog[0], t), 3.6, delta);
-      state.scene.fog.far = THREE.MathUtils.damp(state.scene.fog.far, THREE.MathUtils.lerp(a.fog[1], b.fog[1], t), 3.6, delta);
+      state.scene.fog.near = THREE.MathUtils.damp(state.scene.fog.near, THREE.MathUtils.lerp(a.fog[0], b.fog[0], t) * fogScale, 3.6, delta);
+      state.scene.fog.far = THREE.MathUtils.damp(state.scene.fog.far, THREE.MathUtils.lerp(a.fog[1], b.fog[1], t) * fogScale, 3.6, delta);
       state.scene.fog.color.lerp(bg, 1 - Math.exp(-delta * 4.2));
     }
   });
