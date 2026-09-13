@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -94,9 +95,21 @@ def run_fallback_proof(page, base_url: str, out: Path) -> dict[str, object]:
     }
 
 
-def run_six_chapter(page, base_url: str, out: Path) -> list[dict[str, object]]:
-    page.goto(with_query(base_url, qa="1"), wait_until="domcontentloaded", timeout=30000)
+def run_six_chapter(page, base_url: str, out: Path, require_immersive: bool = False) -> list[dict[str, object]]:
+    params = {"qa": "1"}
+    if require_immersive:
+        # The forced quality override is still subordinate to the WebGL probe: if
+        # software WebGL2 cannot initialize, the runtime safely stays in fallback.
+        params["quality"] = "high"
+    page.goto(with_query(base_url, **params), wait_until="domcontentloaded", timeout=30000)
     wait_for_story(page)
+    if require_immersive:
+        try:
+            page.wait_for_selector('.experience-canvas canvas', state='attached', timeout=15000)
+        except PlaywrightTimeoutError as exc:
+            snap = semantic_snapshot(page, "hero")
+            raise RuntimeError(f"immersive R6 canvas did not mount under software WebGL2: {snap}") from exc
+
     results: list[dict[str, object]] = []
     controls = page.locator('.story-progress .progress-dot')
     for index, chapter in enumerate(CHAPTER_IDS):
@@ -112,6 +125,8 @@ def run_six_chapter(page, base_url: str, out: Path) -> list[dict[str, object]]:
         page.wait_for_timeout(350)
         semantic = semantic_snapshot(page, chapter)
         semantic["pass"] = semantic.get("activeId") == chapter
+        if require_immersive:
+            semantic["pass"] = bool(semantic["pass"]) and int(semantic.get("immersiveCanvasCount") or 0) >= 1 and not bool(semantic.get("fallbackVisible"))
         screenshot = out / f"chapter-{index + 1:02d}-{chapter}.png"
         page.screenshot(path=str(screenshot), full_page=True)
         results.append({"chapter": chapter, "index": index, "screenshot": screenshot.name, "semantic": semantic})
@@ -162,10 +177,19 @@ def main() -> int:
     http_errors: list[str] = []
     request_failures: list[str] = []
     report: dict[str, object] = {"url": args.url, "generatedAt": int(time.time()), "pass": False}
+    require_immersive = os.environ.get("R6_ACCEPTANCE_REQUIRE_IMMERSIVE") == "1"
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            launch_args: list[str] = []
+            if require_immersive:
+                launch_args = [
+                    "--use-angle=swiftshader",
+                    "--enable-unsafe-swiftshader",
+                    "--enable-webgl",
+                    "--ignore-gpu-blocklist",
+                ]
+            browser = p.chromium.launch(headless=True, args=launch_args)
             context = browser.new_context(viewport={"width": 1440, "height": 900}, device_scale_factor=1)
             page = context.new_page()
             page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
@@ -182,9 +206,9 @@ def main() -> int:
             if args.webgl_fallback_proof_only:
                 report["fallback"] = run_fallback_proof(page, args.url, out)
             elif args.six_chapter_proof_only:
-                report["chapters"] = run_six_chapter(page, args.url, out)
+                report["chapters"] = run_six_chapter(page, args.url, out, require_immersive=require_immersive)
             else:
-                report["chapters"] = run_six_chapter(page, args.url, out)
+                report["chapters"] = run_six_chapter(page, args.url, out, require_immersive=require_immersive)
                 report["performanceDiagnostic"] = collect_frame_deltas(page)
 
             browser.close()
@@ -192,6 +216,7 @@ def main() -> int:
         report["consoleErrors"] = severe
         report["httpErrors"] = http_errors
         report["requestFailures"] = request_failures
+        report["requireImmersive"] = require_immersive
         report["pass"] = not severe and not http_errors and not request_failures
         if http_errors:
             raise RuntimeError(f"browser HTTP errors: {http_errors[:8]}")
@@ -203,6 +228,7 @@ def main() -> int:
         report["consoleErrors"] = [e for e in console_errors if "favicon" not in e.lower() and "hydration" not in e.lower()]
         report["httpErrors"] = http_errors
         report["requestFailures"] = request_failures
+        report["requireImmersive"] = require_immersive
         report["error"] = str(exc)
         report["pass"] = False
         (out / "acceptance.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
