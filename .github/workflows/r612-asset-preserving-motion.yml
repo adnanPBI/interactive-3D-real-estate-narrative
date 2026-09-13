@@ -19,6 +19,7 @@ jobs:
       NEXT_PUBLIC_BRAND_ASSET_SET: stage4
       ENABLE_ACCEPTANCE_QA: 1
       CONTACT_WEBHOOK_URL: http://127.0.0.1:8787/contact
+      R6_ACCEPTANCE_REQUIRE_IMMERSIVE: 1
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,8 +62,11 @@ jobs:
 
       - name: Install browser acceptance dependencies
         run: |
-          pip install -r requirements-acceptance.txt
+          pip install -r requirements-acceptance.txt Pillow==12.3.0
           playwright install --with-deps chromium
+
+      - name: Re-prove deterministic CPU fallback in temporary CI workspace
+        run: python3 scripts/prove-r6-cpu-fallback.py
 
       - name: Materialize standalone public/static payload
         shell: bash
@@ -86,7 +90,7 @@ jobs:
           cat /tmp/r612-motion-app.log
           exit 1
 
-      - name: Six-chapter browser acceptance
+      - name: Six-chapter immersive browser acceptance
         run: python3 scripts/acceptance_qa.py --url http://127.0.0.1:3000 --six-chapter-proof-only --out artifacts/r612-asset-motion-six-chapter
 
       - name: Package clean source archive
@@ -96,7 +100,7 @@ jobs:
           mkdir -p artifacts/package
           git archive --format=zip --output=artifacts/package/Convalt_Energy_R6_1_2_Asset_Preserving_Motion.zip HEAD
           sha256sum artifacts/package/Convalt_Energy_R6_1_2_Asset_Preserving_Motion.zip | tee artifacts/package/Convalt_Energy_R6_1_2_Asset_Preserving_Motion.zip.sha256
-          printf 'commit=%s\nasset_identity=PASS\nprocedural_motion=PASS\n' "$GITHUB_SHA" > artifacts/package/BUILD_EVIDENCE.txt
+          printf 'commit=%s\nasset_identity=PASS\nprocedural_motion=PASS\nimmersive_browser=PASS\n' "$GITHUB_SHA" > artifacts/package/BUILD_EVIDENCE.txt
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -105,5 +109,6 @@ jobs:
           path: |
             artifacts/package
             artifacts/r612-asset-motion-six-chapter
+            artifacts/r6-cpu-fallback-proof.json
             /tmp/r612-motion-app.log
           if-no-files-found: warn
