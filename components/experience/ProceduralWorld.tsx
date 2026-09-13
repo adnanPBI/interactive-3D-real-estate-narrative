@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { proceduralChapterProfiles } from "@/experience/config/proceduralWorld";
 import { proceduralSample, resolveProceduralRuntime } from "@/experience/systems/proceduralRuntime";
@@ -124,7 +124,7 @@ function Turbine({
   phase: number;
   wind: number;
   shadows: boolean;
-  offsetRef: MutableRefObject<number>;
+  offsetRef: { current: number };
   loopLength: number;
 }) {
   const root = useRef<THREE.Group>(null);
