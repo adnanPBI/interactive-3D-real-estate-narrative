@@ -14,7 +14,7 @@ fi
 
 echo "R6 Render asset bootstrap: preparing authoritative R6.1.2 runtime assets."
 python3 --version
-python3 -m pip install --disable-pip-version-check trimesh==4.11.1 numpy==2.3.5 Pillow==12.3.0
+python3 -m pip install --disable-pip-version-check trimesh==4.11.1 numpy==2.3.5 scipy==1.16.2 Pillow==12.3.0
 
 payload="/tmp/author-r61.py.gz.b64"
 awk '/^H4sI/{capture=1} capture && /^B64$/{exit} capture{print}' .github/workflows/materialize-r612-source.yml > "$payload"
