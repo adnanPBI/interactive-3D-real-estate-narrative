@@ -64,12 +64,21 @@ jobs:
           pip install -r requirements-acceptance.txt
           playwright install --with-deps chromium
 
-      - name: Start built app and local webhook sink
+      - name: Materialize standalone public/static payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .next/standalone/public .next/standalone/.next/static
+          cp -a public .next/standalone/public
+          mkdir -p .next/standalone/.next
+          cp -a .next/static .next/standalone/.next/static
+
+      - name: Start standalone app and local webhook sink
         shell: bash
         run: |
           set -euo pipefail
           node -e "require('http').createServer((req,res)=>{req.resume();req.on('end',()=>{res.writeHead(204);res.end()})}).listen(8787,'127.0.0.1')" > /tmp/webhook.log 2>&1 &
-          npm start > /tmp/r612-motion-app.log 2>&1 &
+          (cd .next/standalone && HOSTNAME=127.0.0.1 PORT=3000 node server.js) > /tmp/r612-motion-app.log 2>&1 &
           for i in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then exit 0; fi
             sleep 1
