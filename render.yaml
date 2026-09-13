@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: convalt-energy-r612
+    runtime: node
+    plan: starter
+    branch: main
+    autoDeploy: true
+    buildCommand: >-
+      npm ci &&
+      python3 -m pip install --user Pillow==12.3.0 &&
+      python3 scripts/prove-r6-cpu-fallback.py &&
+      npm run build
+    startCommand: npm start -- -H 0.0.0.0 -p $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.18.0
+      - key: DEPLOYMENT_TIER
+        value: production
+      - key: NEXT_PUBLIC_3D_ASSET_SET
+        value: r6
+      - key: NEXT_PUBLIC_BRAND_ASSET_SET
+        value: stage4
+      - key: NEXT_PUBLIC_ALLOW_INDEXING
+        value: "0"
+      - key: ENABLE_ACCEPTANCE_QA
+        value: "1"
+      - key: ENABLE_VISUAL_QA
+        value: "0"
