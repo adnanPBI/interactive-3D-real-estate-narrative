@@ -1,0 +1,60 @@
+name: R6.1.2 procedural runtime CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/r612-procedural-runtime
+  pull_request:
+    paths:
+      - 'components/experience/**'
+      - 'experience/config/**'
+      - 'experience/systems/**'
+      - 'lib/experienceStore.ts'
+      - 'tests/r612-procedural-runtime.test.mjs'
+      - 'docs/R6_1_2_PROCEDURAL_RUNTIME.md'
+      - '.github/workflows/r612-procedural-runtime.yml'
+
+jobs:
+  validate-build-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DEPLOYMENT_TIER: staging
+      BUILD_ID: ${{ github.sha }}
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_ALLOW_INDEXING: 0
+      NEXT_PUBLIC_3D_ASSET_SET: r6
+      NEXT_PUBLIC_BRAND_ASSET_SET: stage4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Clean dependency install
+        run: npm ci --no-audit --no-fund
+      - name: Procedural architecture contracts
+        run: node --test tests/r612-procedural-runtime.test.mjs
+      - name: Existing R6.1.2 remediation contracts
+        run: node --test tests/r6-runtime.test.mjs tests/r6-runtime-contract.test.mjs tests/r612-remediation-contract.test.mjs
+      - name: Semantic TypeScript
+        run: npm run typecheck
+      - name: Next production build
+        run: npm run build
+      - name: Package clean source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/procedural
+          ARCHIVE="artifacts/procedural/Convalt_Energy_R6_1_2_Procedural_Runtime.zip"
+          git archive --format=zip --output="$ARCHIVE" HEAD
+          sha256sum "$ARCHIVE" | tee "$ARCHIVE.sha256"
+          printf 'base=r612-codex-remediation\ncommit=%s\ncompleted=%s\n' "$GITHUB_SHA" "$(date -u +%FT%TZ)" > artifacts/procedural/BUILD_EVIDENCE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: r612-procedural-runtime-source
+          path: artifacts/procedural
+          if-no-files-found: error
