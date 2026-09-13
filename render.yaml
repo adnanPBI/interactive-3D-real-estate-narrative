@@ -11,7 +11,7 @@ services:
       python3 scripts/prove-r6-cpu-fallback.py &&
       npm run build
     startCommand: npm start -- -H 0.0.0.0 -p $PORT
-    healthCheckPath: /api/health
+    healthCheckPath: /
     envVars:
       - key: NODE_VERSION
         value: 22.18.0
