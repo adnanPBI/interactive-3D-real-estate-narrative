@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { sceneTimeline } from "@/experience/config/scenes";
+import { proceduralDefaults, type ProceduralRuntimeConfig } from "@/experience/config/proceduralWorld";
 import { activeChapterForProgress, clampStoryProgress } from "@/experience/config/storyMotion";
+import { sanitizeProceduralPatch } from "@/experience/systems/proceduralRuntime";
 
 export type ExperienceQuality = "high" | "medium" | "fallback";
 export type R6Lod = "lod0" | "lod1" | "lod2" | "proxy";
@@ -19,12 +21,16 @@ type ExperienceState = {
   lodCeiling: R6Lod;
   /** SMAA is mandatory in normal R6 operation; emergency governor state may disable it. */
   postFx: PostFxMode;
+  /** R6.1.2 procedural extension. Values are runtime-tunable and never mutate authored hero assets. */
+  procedural: ProceduralRuntimeConfig;
   setTimelineProgress: (progress: number) => void;
   setTargetProgress: (progress: number) => void;
   setActiveChapter: (index: number) => void;
   setQuality: (quality: ExperienceQuality) => void;
   setLodCeiling: (lod: R6Lod) => void;
   setPostFx: (mode: PostFxMode) => void;
+  setProcedural: (patch: Partial<ProceduralRuntimeConfig>) => void;
+  resetProcedural: () => void;
   resetRenderBudget: () => void;
 };
 
@@ -36,6 +42,7 @@ export const useExperienceStore = create<ExperienceState>((set) => ({
   quality: "high",
   lodCeiling: "lod0",
   postFx: "smaa",
+  procedural: { ...proceduralDefaults },
   setTimelineProgress: (progress) => {
     const next = clampStoryProgress(progress);
     const renderFrom = sceneTimeline(next).from;
@@ -50,6 +57,8 @@ export const useExperienceStore = create<ExperienceState>((set) => ({
   }),
   setLodCeiling: (lodCeiling) => set({ lodCeiling }),
   setPostFx: (postFx) => set({ postFx }),
+  setProcedural: (patch) => set((state) => ({ procedural: { ...state.procedural, ...sanitizeProceduralPatch(patch) } })),
+  resetProcedural: () => set({ procedural: { ...proceduralDefaults } }),
   resetRenderBudget: () => set((state) => ({
     lodCeiling: state.quality === "high" ? "lod0" : state.quality === "medium" ? "lod1" : "proxy",
     postFx: state.quality === "fallback" ? "off" : "smaa",
