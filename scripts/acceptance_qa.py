@@ -159,6 +159,8 @@ def main() -> int:
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     console_errors: list[str] = []
+    http_errors: list[str] = []
+    request_failures: list[str] = []
     report: dict[str, object] = {"url": args.url, "generatedAt": int(time.time()), "pass": False}
 
     try:
@@ -168,6 +170,14 @@ def main() -> int:
             page = context.new_page()
             page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
             page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+            page.on(
+                "response",
+                lambda response: http_errors.append(f"{response.status} {response.url}") if response.status >= 400 else None,
+            )
+            page.on(
+                "requestfailed",
+                lambda request: request_failures.append(f"{request.failure or 'request-failed'} {request.url}"),
+            )
 
             if args.webgl_fallback_proof_only:
                 report["fallback"] = run_fallback_proof(page, args.url, out)
@@ -180,10 +190,19 @@ def main() -> int:
             browser.close()
         severe = [e for e in console_errors if "favicon" not in e.lower() and "hydration" not in e.lower()]
         report["consoleErrors"] = severe
-        report["pass"] = not severe
+        report["httpErrors"] = http_errors
+        report["requestFailures"] = request_failures
+        report["pass"] = not severe and not http_errors and not request_failures
+        if http_errors:
+            raise RuntimeError(f"browser HTTP errors: {http_errors[:8]}")
+        if request_failures:
+            raise RuntimeError(f"browser request failures: {request_failures[:8]}")
         if severe:
             raise RuntimeError(f"browser console/page errors: {severe[:5]}")
     except Exception as exc:
+        report["consoleErrors"] = [e for e in console_errors if "favicon" not in e.lower() and "hydration" not in e.lower()]
+        report["httpErrors"] = http_errors
+        report["requestFailures"] = request_failures
         report["error"] = str(exc)
         report["pass"] = False
         (out / "acceptance.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
