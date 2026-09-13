@@ -5,6 +5,8 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { cameraShot, sceneDefinitions, sceneTimeline, viewportClass } from "@/experience/config/scenes";
 import { storyMotion } from "@/experience/config/storyMotion";
+import { r6ChapterHero } from "@/experience/config/r6Assets";
+import { r612HeroMotion } from "@/experience/config/r612Motion";
 import { useExperienceStore } from "@/lib/experienceStore";
 
 const desired = new THREE.Vector3();
@@ -53,10 +55,9 @@ function setSplineVector(target: THREE.Vector3, width: number, from: number, t: 
 }
 
 /**
- * Camera + atmospheric orchestration. All authored motion is a pure function of
- * the master timeline progress; frame-time damping only removes display jitter.
- * Shadow-map invalidation is bounded by actual sun-position movement because the
- * renderer has shadowMap.autoUpdate disabled for R6.
+ * Camera + atmospheric orchestration. Authored chapter shots remain the source
+ * of truth. Grok-inspired runtime breathing is intentionally tiny and damped,
+ * adding life without replacing the approved camera composition.
  */
 export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) {
   const sun = useRef<THREE.DirectionalLight>(null);
@@ -93,6 +94,9 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
     const viewport = viewportClass(state.size.width);
     const parallax = storyMotion.pointerParallax[viewport];
     const reduced = typeof document !== "undefined" && document.documentElement.dataset.motion === "reduced";
+    const elapsed = state.clock.elapsedTime;
+    const motionA = r612HeroMotion[r6ChapterHero[timeline.from]];
+    const motionB = r612HeroMotion[r6ChapterHero[timeline.to]];
 
     setSplineVector(desired, state.size.width, timeline.from, t, "position");
     const segmentA = shotAt(timeline.from, state.size.width).position[0];
@@ -101,6 +105,12 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
     if (!reduced) {
       desired.x += state.pointer.x * parallax.x;
       desired.y += state.pointer.y * parallax.y;
+      desired.x += Math.sin(elapsed * 0.19 + timeline.position * 0.53)
+        * THREE.MathUtils.lerp(motionA.cameraDrift[0], motionB.cameraDrift[0], t);
+      desired.y += Math.sin(elapsed * 0.15 + 1.1 + timeline.position * 0.37)
+        * THREE.MathUtils.lerp(motionA.cameraDrift[1], motionB.cameraDrift[1], t);
+      desired.z += Math.cos(elapsed * 0.17 + 0.4 + timeline.position * 0.41)
+        * THREE.MathUtils.lerp(motionA.cameraDrift[2], motionB.cameraDrift[2], t);
     }
 
     const cameraDamping = reduced ? 24 : storyMotion.cameraDamping;
@@ -112,6 +122,10 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
     if (!reduced) {
       lookTarget.x += state.pointer.x * parallax.x * 0.22;
       lookTarget.y += state.pointer.y * parallax.y * 0.26;
+      lookTarget.x += Math.sin(elapsed * 0.13 + 0.8)
+        * THREE.MathUtils.lerp(motionA.cameraLookDrift[0], motionB.cameraLookDrift[0], t);
+      lookTarget.y += Math.cos(elapsed * 0.11 + 0.2)
+        * THREE.MathUtils.lerp(motionA.cameraLookDrift[1], motionB.cameraLookDrift[1], t);
     }
     state.camera.lookAt(lookTarget);
 
@@ -128,15 +142,25 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
       lightA.fromArray(a.keyLight);
       lightB.fromArray(b.keyLight);
       sun.current.position.copy(lightA.lerp(lightB, t));
+      if (!reduced) {
+        sun.current.position.x += Math.sin(elapsed * 0.085)
+          * THREE.MathUtils.lerp(motionA.sunOrbit[0], motionB.sunOrbit[0], t);
+        sun.current.position.y += Math.sin(elapsed * 0.061 + 0.7)
+          * THREE.MathUtils.lerp(motionA.sunOrbit[1], motionB.sunOrbit[1], t);
+        sun.current.position.z += Math.cos(elapsed * 0.085)
+          * THREE.MathUtils.lerp(motionA.sunOrbit[2], motionB.sunOrbit[2], t);
+      }
       const prior = previousShadowSun.current;
       if (!prior || prior.distanceToSquared(sun.current.position) >= SHADOW_POSITION_EPSILON * SHADOW_POSITION_EPSILON) {
         state.gl.shadowMap.needsUpdate = true;
         if (prior) prior.copy(sun.current.position);
         else previousShadowSun.current = sun.current.position.clone();
       }
+      const pulse = reduced ? 0 : Math.sin(elapsed * 0.19 + progress * Math.PI * 2)
+        * THREE.MathUtils.lerp(motionA.sunPulse, motionB.sunPulse, t);
       sun.current.intensity = THREE.MathUtils.damp(
         sun.current.intensity,
-        THREE.MathUtils.lerp(a.keyIntensity, b.keyIntensity, t) * (quality === "high" ? 1 : 0.9),
+        THREE.MathUtils.lerp(a.keyIntensity, b.keyIntensity, t) * (quality === "high" ? 1 : 0.9) * (1 + pulse),
         storyMotion.lightDamping,
         delta,
       );
