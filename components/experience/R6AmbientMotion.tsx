@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import { r612HeroMotion, type FlowSurfaceProfile, type RunnerTrailProfile, type SteamEmitterProfile } from "@/experience/config/r612Motion";
 import type { R6HeroId } from "@/experience/config/r6Assets";
@@ -80,7 +80,8 @@ function FlowSurface({ profile }: { profile: FlowSurfaceProfile }) {
   }), [profile.opacity, profile.speed, profile.tint]);
 
   useFrame((state) => {
-    if (material.current) material.current.uniforms.uTime.value = state.clock.elapsedTime;
+    const reduced = typeof document !== "undefined" && document.documentElement.dataset.motion === "reduced";
+    if (!reduced && material.current) material.current.uniforms.uTime.value = state.clock.elapsedTime;
   });
 
   return (
@@ -138,7 +139,8 @@ function SteamEmitter({ profile, quality, index }: { profile: SteamEmitterProfil
 
   useEffect(() => () => geometry.dispose(), [geometry]);
   useFrame((state) => {
-    if (material.current) material.current.uniforms.uTime.value = state.clock.elapsedTime;
+    const reduced = typeof document !== "undefined" && document.documentElement.dataset.motion === "reduced";
+    if (!reduced && material.current) material.current.uniforms.uTime.value = state.clock.elapsedTime;
   });
 
   return (
@@ -197,7 +199,7 @@ function EndlessServiceTrail({ profile, accent, quality }: { profile: RunnerTrai
     if (b.current) b.current.position.z = offset.current - profile.length;
   });
 
-  const trail = (ref: React.RefObject<THREE.InstancedMesh | null>) => (
+  const trail = (ref: RefObject<THREE.InstancedMesh | null>) => (
     <instancedMesh ref={ref} args={[undefined, undefined, count]} frustumCulled={false}>
       <boxGeometry args={[0.08, 0.016, 0.42]} />
       <meshStandardMaterial
