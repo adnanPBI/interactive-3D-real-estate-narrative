@@ -9,6 +9,7 @@ import { useExperienceStore } from "@/lib/experienceStore";
 import { AccessibilityTwin } from "./AccessibilityTwin";
 import { StaticSceneFallback } from "./StaticSceneFallback";
 import { ExperienceErrorBoundary } from "./ExperienceErrorBoundary";
+import { ProceduralRuntimeBridge } from "./ProceduralRuntimeBridge";
 import { useQualityTier } from "./useQualityTier";
 
 const ExperienceCanvas = dynamic(
@@ -220,6 +221,7 @@ export function HomeExperience() {
 
   return (
     <div className="experience-shell experience-shell--corporate" ref={shellRef} data-interacted={hasInteracted}>
+      <ProceduralRuntimeBridge />
       {quality === "fallback" || runtimeFallback ? (
         <StaticSceneFallback activeChapter={activeChapter} />
       ) : (
