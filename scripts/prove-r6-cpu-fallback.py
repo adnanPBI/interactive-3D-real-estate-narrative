@@ -2,6 +2,7 @@
 """Re-prove deterministic CPU-only generation of the six R6 fallback frames."""
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 from pathlib import Path
@@ -28,7 +29,7 @@ EXPECTED = (
     "recycling-intake.webp",
     "connected-campus.webp",
 )
-FORBIDDEN = ("vtk", "OpenGL", "EGL", "OSMesa", "pyvista")
+FORBIDDEN_IMPORT_ROOTS = {"vtk", "pyvista", "OpenGL", "EGL", "OSMesa"}
 
 
 def digest(path: Path) -> str:
@@ -51,16 +52,32 @@ def snapshot() -> dict[str, str]:
     return result
 
 
+def forbidden_imports(source: str) -> list[str]:
+    """Return forbidden rendering-stack imports, ignoring comments/docstrings."""
+    tree = ast.parse(source, filename=str(RENDERER))
+    hits: set[str] = set()
+    for node in ast.walk(tree):
+        modules: list[str] = []
+        if isinstance(node, ast.Import):
+            modules.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.append(node.module)
+        for module in modules:
+            root = module.split(".", 1)[0]
+            if root in FORBIDDEN_IMPORT_ROOTS:
+                hits.add(module)
+    return sorted(hits)
+
+
 def run_renderer() -> None:
     subprocess.run([sys.executable, str(RENDERER)], cwd=ROOT, check=True)
 
 
 def main() -> int:
     source = RENDERER.read_text(encoding="utf-8")
-    forbidden_hits = [term for term in FORBIDDEN if term.lower() in source.lower() and term not in ("OpenGL", "EGL", "OSMesa")]
-    # Those three words appear only in the renderer's explicit "no dependency" documentation.
+    forbidden_hits = forbidden_imports(source)
     if forbidden_hits:
-        raise RuntimeError(f"CPU fallback renderer imports/references forbidden rendering stacks: {forbidden_hits}")
+        raise RuntimeError(f"CPU fallback renderer imports forbidden rendering stacks: {forbidden_hits}")
 
     run_renderer()
     first = snapshot()
