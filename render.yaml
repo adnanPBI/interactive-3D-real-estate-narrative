@@ -7,7 +7,7 @@ services:
     autoDeploy: true
     buildCommand: >-
       npm ci &&
-      python3 -m pip install --user Pillow==12.3.0 &&
+      python3 -m pip install Pillow==12.3.0 &&
       python3 scripts/prove-r6-cpu-fallback.py &&
       npm run build
     startCommand: npm start -- -H 0.0.0.0 -p $PORT
