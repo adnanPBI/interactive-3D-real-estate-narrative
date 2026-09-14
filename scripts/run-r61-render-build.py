@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Run the canonical R6.1 builder against the normalized R6 compatibility API.
 
-This launcher leaves build-r61-assets.py untouched and injects only the
-compatibility API required by Render's normalized source tree.
+R6.1.4 also filters road/vehicle components from the manufacturing visual-master
+when producing runtime LODs. The visual-master itself remains untouched so its
+reviewed high-detail industrial geometry stays the source of truth.
 """
 from __future__ import annotations
 
@@ -39,6 +40,51 @@ def fixed_dfd_rgba8(srgb: bool) -> bytes:
     return header + b"".join(samples)
 
 
+ROAD_VEHICLE_TOKENS = (
+    "road", "asphalt", "driveway", "street", "parking", "parked",
+    "car", "truck", "vehicle", "forklift", "lane_mark", "lane-mark",
+    "road_mark", "road-mark",
+)
+
+
+def _is_road_or_vehicle(builder, node: str, mesh) -> bool:
+    material = builder.material_name(mesh)
+    text = f"{node} {material}".lower().replace(" ", "_")
+    return any(token in text for token in ROAD_VEHICLE_TOKENS)
+
+
+def install_manufacturing_filter(builder) -> None:
+    original = builder.select_source_meshes
+
+    def filtered(source, runtime_lod: int):
+        selected = original(source, runtime_lod)
+        kept = []
+        removed = []
+        flat_candidates = []
+        for node, mesh in selected:
+            if _is_road_or_vehicle(builder, node, mesh):
+                removed.append((node, builder.material_name(mesh), int(len(mesh.faces))))
+                continue
+            kept.append((node, mesh))
+            if runtime_lod == 0:
+                ext = mesh.bounds[1] - mesh.bounds[0]
+                horizontal_span = max(float(ext[0]), float(ext[2]))
+                if float(ext[1]) <= 0.22 and horizontal_span >= 4.0:
+                    flat_candidates.append((node, builder.material_name(mesh), [round(float(v), 3) for v in ext]))
+        print(
+            f"R6.1.4 manufacturing road/vehicle filter lod{runtime_lod}: "
+            f"removed={len(removed)} kept={len(kept)}"
+        )
+        for node, material, triangles in removed[:80]:
+            print(f"  removed component node={node} material={material} triangles={triangles}")
+        if runtime_lod == 0:
+            for node, material, ext in flat_candidates[:80]:
+                print(f"  flat-candidate node={node} material={material} extents={ext}")
+        return kept
+
+    builder.select_source_meshes = filtered
+
+
 def main() -> int:
     compat = load(ROOT / "scripts" / "r61-legacy-compat.py", "r61_render_compat")
     # Normalize the dev KTX2 DFD header to the same 21-field structure used by
@@ -46,6 +92,7 @@ def main() -> int:
     compat._dfd_rgba8 = fixed_dfd_rgba8
     builder = load(ROOT / "scripts" / "build-r61-assets.py", "r61_render_builder")
     builder.load_legacy = lambda: compat
+    install_manufacturing_filter(builder)
     # The ordinary Render build intentionally uses development KTX2 output.
     # Release/Basis encoding remains a separate audited production gate.
     sys.argv = [str(ROOT / "scripts" / "build-r61-assets.py")]
