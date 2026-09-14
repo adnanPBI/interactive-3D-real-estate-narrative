@@ -7,9 +7,10 @@ import { sceneDefinitions } from "@/experience/config/scenes";
 import { useExperienceStore } from "@/lib/experienceStore";
 
 /**
- * Authored per-chapter environment probes. We derive compact PMREM targets from
- * each chapter's approved background/accent palette rather than injecting a
- * generic studio-room environment that can flatten scene-specific materials.
+ * Per-chapter environment probes tuned to preserve PBR separation.  The prior
+ * probe was bright enough to lift white/grey industrial materials into the
+ * editorial background; this lower-energy probe keeps reflections without
+ * flattening the architecture.
  */
 export function EnvironmentProbe() {
   const gl = useThree((state) => state.gl);
@@ -22,12 +23,13 @@ export function EnvironmentProbe() {
     pmrem.compileCubemapShader();
     const targets = sceneDefinitions.map((definition) => {
       const probeScene = new THREE.Scene();
-      probeScene.background = new THREE.Color(definition.background);
-      const hemi = new THREE.HemisphereLight("#fffaf1", definition.background, 2.2);
-      const key = new THREE.DirectionalLight(definition.accent, 3.4);
+      const backdrop = new THREE.Color(definition.background).multiplyScalar(0.82);
+      probeScene.background = backdrop;
+      const hemi = new THREE.HemisphereLight("#e7e2d8", backdrop, 1.10);
+      const key = new THREE.DirectionalLight(definition.accent, 1.65);
       key.position.fromArray(definition.keyLight);
       probeScene.add(hemi, key);
-      return pmrem.fromScene(probeScene, 0.05);
+      return pmrem.fromScene(probeScene, 0.08);
     });
     targetsRef.current = targets;
     activeRef.current = -1;
