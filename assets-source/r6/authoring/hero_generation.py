@@ -20,7 +20,6 @@ def build(ctx, lod: str):
             b.cyl(.035,1.85,(float(x)+pole,.925,-.85),"Steel",sections=10)
         b.cyl_between((float(x)-.32,1.72,-.85),(float(x)+.32,1.72,-.85),.026,"Aluminum",10)
         if high:
-            # Busbar hardware, disconnect arms and control boxes.
             b.box((.44,.07,.10),(float(x),1.52,-.62),"Bronze")
             b.box((.28,.40,.22),(float(x)+.28,.38,1.03),"Graphite")
 
@@ -28,7 +27,6 @@ def build(ctx, lod: str):
     safety_rail(b,(-1.0,0,-1.80),(6.7,0,-1.80),.82,22 if high else 13)
     cable_bundle(b,(-.6,1.92,-.85),(6.2,1.92,-.85),8 if high else 5,.017)
 
-    # BESS line and inverter cabinets with vents, plinths and status lamps.
     for i,x in enumerate(np.linspace(-5.8,-1.8,5 if high else 3)):
         bevel_box(b,(1.05,1.30,2.10),(float(x),.65,1.35),"White",.07)
         b.box((.76,.62,.035),(float(x),.66,2.42),"Graphite")
@@ -46,15 +44,13 @@ def build(ctx, lod: str):
             r5.control_cabinet(b,(x,0,-.15),.48,"CoolGlow")
         for x in np.linspace(-7.6,-1.4,10 if high else 6):
             r4.solar_table(b,(float(x),.62,-4.30),.46 if high else .40)
-        r5.high_turbine(b,(7.9,0,-4.35),.78 if high else .64,-.10)
+        # No baked turbine: R6.1.4 provides rotor-capable runtime turbines.
 
     if high:
-        r5.high_turbine(b,(10.2,0,-2.7),.62,.12)
         for x in (-5.6,-3.4,-1.2,1.0,3.2,5.4):
             r4.street_light(b,(x,0,3.40),.68,1.57)
         for x in (-6.6,-5.0,-3.4):
             r4.transformer_pad(b,(x,0,3.10),.54)
-        # Perimeter curb and cable trench covers create readable site structure.
         b.box((14.4,.07,.34),(-.35,.035,3.78),"Concrete")
         b.box((14.4,.05,.16),(-.35,.085,3.78),"Graphite")
 
