@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { r612HeroMotion } from "@/experience/config/r612Motion";
 import type { R6HeroId } from "@/experience/config/r6Assets";
@@ -17,173 +17,203 @@ function reducedMotion() {
   return typeof document !== "undefined" && document.documentElement.dataset.motion === "reduced";
 }
 
-const dummy = new THREE.Object3D();
+const tmp = new THREE.Object3D();
 
-function ServiceTraffic({ bounds, accent, speed, quality }: { bounds: HeroLocalBounds; accent: string; speed: number; quality: "high" | "medium" }) {
-  const bodies = useRef<THREE.InstancedMesh>(null);
-  const cabs = useRef<THREE.InstancedMesh>(null);
-  const lamps = useRef<THREE.InstancedMesh>(null);
-  const progress = useRef(0);
-  const count = quality === "high" ? 6 : 4;
-  const width = Math.max(5, bounds.size[0]);
-  const roadZ = bounds.max[2] + Math.max(0.38, bounds.size[2] * 0.045);
-  const roadY = bounds.min[1] + 0.055;
-  const lane = Math.max(0.18, Math.min(0.34, bounds.size[2] * 0.025));
-  const vehicleScale = Math.max(0.58, Math.min(0.92, width / 13));
-
-  useFrame((_, delta) => {
-    if (reducedMotion()) return;
-    progress.current = (progress.current + Math.min(delta, 0.06) * Math.max(0.14, speed)) % width;
-    for (let i = 0; i < count; i += 1) {
-      const direction = i % 2 === 0 ? 1 : -1;
-      const base = (i / count) * width;
-      const wrapped = ((base + progress.current * direction + width * 4) % width) - width * 0.5;
-      const x = bounds.center[0] + wrapped;
-      const z = roadZ + (i % 2 === 0 ? -lane : lane);
-      const yaw = direction > 0 ? Math.PI / 2 : -Math.PI / 2;
-
-      dummy.position.set(x, roadY + 0.13 * vehicleScale, z);
-      dummy.rotation.set(0, yaw, 0);
-      dummy.scale.set(vehicleScale, vehicleScale, vehicleScale);
-      dummy.updateMatrix();
-      bodies.current?.setMatrixAt(i, dummy.matrix);
-
-      dummy.position.set(x + direction * 0.15 * vehicleScale, roadY + 0.23 * vehicleScale, z);
-      dummy.scale.set(vehicleScale * 0.76, vehicleScale * 0.76, vehicleScale * 0.76);
-      dummy.updateMatrix();
-      cabs.current?.setMatrixAt(i, dummy.matrix);
-
-      dummy.position.set(x + direction * 0.36 * vehicleScale, roadY + 0.20 * vehicleScale, z);
-      dummy.scale.set(vehicleScale * 0.58, vehicleScale * 0.58, vehicleScale * 0.58);
-      dummy.updateMatrix();
-      lamps.current?.setMatrixAt(i, dummy.matrix);
-    }
-    for (const mesh of [bodies.current, cabs.current, lamps.current]) {
-      if (mesh) mesh.instanceMatrix.needsUpdate = true;
-    }
-  });
-
+function ServiceTruck({ accent }: { accent: string }) {
   return (
-    <group name="bounds-aware-service-traffic">
-      <mesh position={[bounds.center[0], roadY, roadZ]} receiveShadow>
-        <boxGeometry args={[width * 1.06, 0.035, lane * 3.8]} />
-        <meshStandardMaterial color="#3f4341" roughness={0.93} metalness={0.03} />
+    <group>
+      <mesh castShadow position={[0, 0.20, 0]}>
+        <boxGeometry args={[0.82, 0.25, 0.36]} />
+        <meshStandardMaterial color="#48514f" metalness={0.34} roughness={0.42} />
       </mesh>
-      <instancedMesh ref={bodies} args={[undefined, undefined, count]} castShadow frustumCulled={false}>
-        <boxGeometry args={[0.66, 0.18, 0.32]} />
-        <meshStandardMaterial color="#4d5653" metalness={0.42} roughness={0.42} />
-      </instancedMesh>
-      <instancedMesh ref={cabs} args={[undefined, undefined, count]} castShadow frustumCulled={false}>
-        <boxGeometry args={[0.32, 0.20, 0.30]} />
-        <meshStandardMaterial color="#b6bfbb" metalness={0.16} roughness={0.36} />
-      </instancedMesh>
-      <instancedMesh ref={lamps} args={[undefined, undefined, count]} frustumCulled={false}>
-        <boxGeometry args={[0.06, 0.05, 0.14]} />
-        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={1.35} toneMapped={false} />
-      </instancedMesh>
+      <mesh castShadow position={[0.22, 0.36, 0]}>
+        <boxGeometry args={[0.34, 0.27, 0.34]} />
+        <meshPhysicalMaterial color="#d5d8d3" metalness={0.08} roughness={0.30} clearcoat={0.28} clearcoatRoughness={0.26} />
+      </mesh>
+      {[-0.26, 0.27].flatMap((x) => [-0.20, 0.20].map((z) => (
+        <mesh key={`${x}-${z}`} rotation={[Math.PI / 2, 0, 0]} position={[x, 0.08, z * 0.72]} castShadow>
+          <cylinderGeometry args={[0.105, 0.105, 0.08, 16]} />
+          <meshStandardMaterial color="#151817" roughness={0.78} />
+        </mesh>
+      )))}
+      <mesh position={[0.31, 0.53, 0]}>
+        <cylinderGeometry args={[0.045, 0.045, 0.075, 12]} />
+        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.2} toneMapped={false} />
+      </mesh>
     </group>
   );
 }
 
-function RoofSteam({ bounds, hero, quality }: { bounds: HeroLocalBounds; hero: R6HeroId; quality: "high" | "medium" }) {
-  const material = useRef<THREE.PointsMaterial>(null);
-  const emitters = hero === "data-center-cooling" ? 2 : hero === "manufacturing-line" || hero === "recycling-intake" ? 1 : 0;
-  const count = quality === "high" ? 22 : 14;
-  const points = useMemo(() => {
-    if (!emitters) return new THREE.BufferGeometry();
-    const array = new Float32Array(count * emitters * 3);
-    for (let e = 0; e < emitters; e += 1) {
-      const originX = bounds.center[0] + (e - (emitters - 1) / 2) * bounds.size[0] * 0.18;
-      const originZ = bounds.center[2] - bounds.size[2] * 0.12;
-      for (let i = 0; i < count; i += 1) {
-        const k = e * count + i;
-        const phase = i / count;
-        array[k * 3] = originX + Math.sin(i * 2.399) * bounds.size[0] * 0.012;
-        array[k * 3 + 1] = bounds.max[1] + 0.10 + phase * Math.max(0.9, bounds.size[1] * 0.28);
-        array[k * 3 + 2] = originZ + Math.cos(i * 1.73) * bounds.size[2] * 0.012;
-      }
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(array, 3));
-    return g;
-  }, [bounds, count, emitters]);
+/** Sparse, recognizable trucks on a road derived from the actual GLB footprint. */
+function ReadableServiceTraffic({ bounds, accent, speed }: { bounds: HeroLocalBounds; accent: string; speed: number }) {
+  const trucks = useRef<Array<THREE.Group | null>>([]);
+  const progress = useRef(0);
+  const width = Math.max(6, bounds.size[0] * 0.82);
+  const roadZ = bounds.max[2] + Math.max(0.55, bounds.size[2] * 0.07);
+  const roadY = bounds.min[1] + 0.025;
+  const count = 3;
 
-  useEffect(() => () => points.dispose(), [points]);
-  useFrame((state) => {
-    if (reducedMotion() || !points.attributes.position) return;
-    const attr = points.attributes.position as THREE.BufferAttribute;
-    const rise = Math.max(0.9, bounds.size[1] * 0.28);
-    for (let k = 0; k < attr.count; k += 1) {
-      const emitter = Math.floor(k / count);
-      const originX = bounds.center[0] + (emitter - (emitters - 1) / 2) * bounds.size[0] * 0.18;
-      const originZ = bounds.center[2] - bounds.size[2] * 0.12;
-      const local = (k % count) / count;
-      const phase = (local + state.clock.elapsedTime * 0.035) % 1;
-      attr.setXYZ(
-        k,
-        originX + Math.sin(k * 2.399 + phase * 5) * bounds.size[0] * 0.012 * (0.3 + phase),
-        bounds.max[1] + 0.10 + phase * rise,
-        originZ + Math.cos(k * 1.73 + phase * 4) * bounds.size[2] * 0.012 * (0.3 + phase),
-      );
+  useFrame((_, delta) => {
+    if (reducedMotion()) return;
+    progress.current = (progress.current + Math.min(delta, 0.06) * Math.max(0.16, speed * 0.72)) % 1;
+    for (let i = 0; i < count; i += 1) {
+      const node = trucks.current[i];
+      if (!node) continue;
+      const direction = i === 1 ? -1 : 1;
+      const phase = (progress.current * direction + i / count + 3) % 1;
+      const x = bounds.center[0] - width * 0.5 + phase * width;
+      node.position.set(x, roadY, roadZ + (i === 1 ? 0.30 : -0.10));
+      node.rotation.y = direction > 0 ? 0 : Math.PI;
     }
-    attr.needsUpdate = true;
-    if (material.current) material.current.opacity = 0.12;
   });
 
-  if (!emitters) return null;
   return (
-    <points geometry={points} frustumCulled={false}>
-      <pointsMaterial ref={material} color="#d4d8d5" size={quality === "high" ? 0.18 : 0.14} sizeAttenuation transparent opacity={0.12} depthWrite={false} />
-    </points>
+    <group name="readable-service-traffic">
+      <mesh position={[bounds.center[0], roadY, roadZ + 0.10]} receiveShadow>
+        <boxGeometry args={[width * 1.06, 0.04, 1.05]} />
+        <meshStandardMaterial color="#343938" roughness={0.96} metalness={0.02} />
+      </mesh>
+      <mesh position={[bounds.center[0], roadY + 0.025, roadZ + 0.10]}>
+        <boxGeometry args={[width * 0.96, 0.012, 0.025]} />
+        <meshStandardMaterial color="#ddd2ae" emissive="#b69a55" emissiveIntensity={0.12} />
+      </mesh>
+      {Array.from({ length: count }, (_, i) => (
+        <group key={i} ref={(node) => { trucks.current[i] = node; }} scale={i === 1 ? 0.92 : 1}>
+          <ServiceTruck accent={accent} />
+        </group>
+      ))}
+    </group>
   );
 }
 
-function ProcessLine({ bounds, accent, hero, quality }: { bounds: HeroLocalBounds; accent: string; hero: R6HeroId; quality: "high" | "medium" }) {
+function ProcessConveyor({ bounds, accent, hero }: { bounds: HeroLocalBounds; accent: string; hero: R6HeroId }) {
   const carriers = useRef<THREE.InstancedMesh>(null);
-  const t = useRef(0);
+  const phase = useRef(0);
   const enabled = hero === "manufacturing-line" || hero === "recycling-intake";
-  const count = quality === "high" ? 8 : 5;
-  const length = bounds.size[0] * 0.48;
-  const y = bounds.min[1] + Math.max(0.16, bounds.size[1] * 0.035);
-  const z = bounds.max[2] - bounds.size[2] * 0.16;
+  const count = 6;
+  const length = Math.max(3.8, bounds.size[0] * 0.42);
+  const y = bounds.min[1] + Math.max(0.24, bounds.size[1] * 0.055);
+  const z = bounds.max[2] - bounds.size[2] * 0.15;
 
   useFrame((_, delta) => {
     if (!enabled || !carriers.current || reducedMotion()) return;
-    t.current = (t.current + Math.min(delta, 0.06) * 0.18) % 1;
+    phase.current = (phase.current + Math.min(delta, 0.06) * 0.10) % 1;
     for (let i = 0; i < count; i += 1) {
-      const u = (i / count + t.current) % 1;
-      dummy.position.set(bounds.center[0] - length * 0.5 + u * length, y + 0.10, z);
-      dummy.rotation.set(0, 0, 0);
-      dummy.scale.set(1, 1, 1);
-      dummy.updateMatrix();
-      carriers.current.setMatrixAt(i, dummy.matrix);
+      const u = (i / count + phase.current) % 1;
+      tmp.position.set(bounds.center[0] - length * 0.5 + u * length, y + 0.13, z);
+      tmp.rotation.set(0, 0, 0);
+      tmp.scale.set(1, 1, 1);
+      tmp.updateMatrix();
+      carriers.current.setMatrixAt(i, tmp.matrix);
     }
     carriers.current.instanceMatrix.needsUpdate = true;
   });
 
   if (!enabled) return null;
   return (
-    <group>
+    <group name="readable-process-conveyor">
       <mesh position={[bounds.center[0], y, z]} receiveShadow>
-        <boxGeometry args={[length, 0.08, 0.42]} />
-        <meshStandardMaterial color="#454a48" metalness={0.46} roughness={0.48} />
+        <boxGeometry args={[length, 0.13, 0.62]} />
+        <meshStandardMaterial color="#353b3a" metalness={0.58} roughness={0.42} />
       </mesh>
       <instancedMesh ref={carriers} args={[undefined, undefined, count]} castShadow frustumCulled={false}>
-        <boxGeometry args={[0.34, 0.08, 0.30]} />
-        <meshStandardMaterial color={accent} metalness={0.22} roughness={0.34} />
+        <boxGeometry args={[0.44, 0.18, 0.40]} />
+        <meshPhysicalMaterial color={accent} metalness={0.24} roughness={0.31} clearcoat={0.25} clearcoatRoughness={0.22} />
       </instancedMesh>
     </group>
   );
 }
 
-export function R6HeroAmbientMotion({ hero, accent, quality, bounds }: { hero: R6HeroId; accent: string; quality: "high" | "medium"; bounds: HeroLocalBounds | null }) {
+function Turbine({ position, scale, speed }: { position: [number, number, number]; scale: number; speed: number }) {
+  const rotor = useRef<THREE.Group>(null);
+  useFrame((_, delta) => {
+    if (!rotor.current || reducedMotion()) return;
+    rotor.current.rotation.z += Math.min(delta, 0.06) * speed;
+  });
+  const hubY = 5.1 * scale;
+  const bladeLength = 1.75 * scale;
+  return (
+    <group position={position}>
+      <mesh castShadow position={[0, hubY * 0.5, 0]}>
+        <cylinderGeometry args={[0.075 * scale, 0.17 * scale, hubY, 28]} />
+        <meshStandardMaterial color="#d2d4ce" metalness={0.46} roughness={0.32} />
+      </mesh>
+      <mesh castShadow position={[0, 0.06 * scale, 0]}>
+        <cylinderGeometry args={[0.28 * scale, 0.34 * scale, 0.12 * scale, 24]} />
+        <meshStandardMaterial color="#777d79" roughness={0.64} />
+      </mesh>
+      <group position={[0, hubY, 0.03 * scale]}>
+        <mesh castShadow>
+          <sphereGeometry args={[0.18 * scale, 20, 14]} />
+          <meshStandardMaterial color="#e1e1da" metalness={0.32} roughness={0.28} />
+        </mesh>
+        <group ref={rotor}>
+          {[0, 1, 2].map((i) => {
+            const a = i * (Math.PI * 2 / 3);
+            return (
+              <mesh key={i} castShadow position={[Math.cos(a) * bladeLength * 0.52, Math.sin(a) * bladeLength * 0.52, 0]} rotation={[0, 0, a - Math.PI / 2]}>
+                <boxGeometry args={[0.17 * scale, bladeLength, 0.055 * scale]} />
+                <meshStandardMaterial color="#ecece6" metalness={0.18} roughness={0.34} />
+              </mesh>
+            );
+          })}
+        </group>
+      </group>
+    </group>
+  );
+}
+
+function ReadableTurbines({ hero, bounds }: { hero: R6HeroId; bounds: HeroLocalBounds }) {
+  if (!(hero === "integrated-campus" || hero === "substation-bess" || hero === "connected-campus")) return null;
+  const z = bounds.min[2] + bounds.size[2] * 0.18;
+  const baseX = bounds.max[0] + Math.max(0.75, bounds.size[0] * 0.05);
+  const scale = Math.max(0.62, Math.min(0.82, bounds.size[1] / 4.8));
+  const count = hero === "substation-bess" ? 2 : 1;
+  return (
+    <group name="readable-runtime-turbines">
+      {Array.from({ length: count }, (_, i) => (
+        <Turbine key={i} position={[baseX + i * 2.0 * scale, bounds.min[1], z - i * 1.2]} scale={scale} speed={0.72 + i * 0.09} />
+      ))}
+    </group>
+  );
+}
+
+function RoofSteam({ bounds, hero }: { bounds: HeroLocalBounds; hero: R6HeroId }) {
+  const points = useRef<THREE.Points>(null);
+  const enabled = hero === "data-center-cooling" || hero === "manufacturing-line";
+  const geometry = useMemo(() => {
+    const count = 18;
+    const arr = new Float32Array(count * 3);
+    for (let i = 0; i < count; i += 1) {
+      arr[i * 3] = Math.sin(i * 2.2) * 0.10;
+      arr[i * 3 + 1] = (i / count) * 0.9;
+      arr[i * 3 + 2] = Math.cos(i * 1.6) * 0.08;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+    return g;
+  }, []);
+  useFrame((state) => {
+    if (!enabled || !points.current || reducedMotion()) return;
+    points.current.position.y = bounds.max[1] + 0.12 + ((state.clock.elapsedTime * 0.025) % 0.16);
+  });
+  if (!enabled) return null;
+  return (
+    <points ref={points} geometry={geometry} position={[bounds.center[0] + bounds.size[0] * 0.10, bounds.max[1] + 0.12, bounds.center[2] - bounds.size[2] * 0.10]} frustumCulled={false}>
+      <pointsMaterial color="#aeb6b2" size={0.16} transparent opacity={0.16} depthWrite={false} />
+    </points>
+  );
+}
+
+export function R6HeroAmbientMotion({ hero, accent, quality: _quality, bounds }: { hero: R6HeroId; accent: string; quality: "high" | "medium"; bounds: HeroLocalBounds | null }) {
   const profile = r612HeroMotion[hero];
   if (!bounds) return null;
   return (
-    <group name="r612-runtime-motion" userData={{ runtimeOnly: true, boundsAware: true }}>
-      {profile.runner ? <ServiceTraffic bounds={bounds} accent={accent} speed={profile.runner.speed} quality={quality} /> : null}
-      <RoofSteam bounds={bounds} hero={hero} quality={quality} />
-      <ProcessLine bounds={bounds} accent={accent} hero={hero} quality={quality} />
+    <group name="r613-readable-motion" userData={{ runtimeOnly: true, boundsAware: true, semanticMotion: true }}>
+      {profile.runner ? <ReadableServiceTraffic bounds={bounds} accent={accent} speed={profile.runner.speed} /> : null}
+      <ProcessConveyor bounds={bounds} accent={accent} hero={hero} />
+      <ReadableTurbines hero={hero} bounds={bounds} />
+      <RoofSteam bounds={bounds} hero={hero} />
     </group>
   );
 }
