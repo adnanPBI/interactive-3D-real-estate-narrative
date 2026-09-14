@@ -15,7 +15,7 @@ const lightA = new THREE.Vector3();
 const lightB = new THREE.Vector3();
 const accentA = new THREE.Color();
 const accentB = new THREE.Color();
-const warm = new THREE.Color("#fff7e8");
+const warm = new THREE.Color("#f5ead8");
 const bgA = new THREE.Color();
 const bgB = new THREE.Color();
 const bg = new THREE.Color();
@@ -25,7 +25,6 @@ function smoothStep(value: number) {
   return value * value * (3 - 2 * value);
 }
 
-/** Allocation-free cardinal/Catmull-Rom scalar interpolation. */
 function catmull(p0: number, p1: number, p2: number, p3: number, t: number) {
   const t2 = t * t;
   const t3 = t2 * t;
@@ -54,11 +53,6 @@ function setSplineVector(target: THREE.Vector3, width: number, from: number, t: 
   );
 }
 
-/**
- * Camera + atmospheric orchestration. Authored chapter shots remain the source
- * of truth. Grok-inspired runtime breathing is intentionally tiny and damped,
- * adding life without replacing the approved camera composition.
- */
 export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) {
   const sun = useRef<THREE.DirectionalLight>(null);
   const rim = useRef<THREE.PointLight>(null);
@@ -72,7 +66,7 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
     light.shadow.mapSize.set(shadowSize, shadowSize);
     light.shadow.bias = -0.00018;
     light.shadow.normalBias = quality === "high" ? 0.018 : 0.026;
-    light.shadow.radius = quality === "high" ? 1.35 : 1.0;
+    light.shadow.radius = quality === "high" ? 1.15 : 0.9;
     const camera = light.shadow.camera as THREE.OrthographicCamera;
     const extent = quality === "high" ? 14.5 : 12.5;
     camera.left = -extent;
@@ -103,13 +97,13 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
     const segmentB = shotAt(timeline.to, state.size.width).position[0];
     desired.x = THREE.MathUtils.clamp(desired.x, Math.min(segmentA, segmentB), Math.max(segmentA, segmentB));
     if (!reduced) {
-      desired.x += state.pointer.x * parallax.x;
-      desired.y += state.pointer.y * parallax.y;
-      desired.x += Math.sin(elapsed * 0.19 + timeline.position * 0.53)
+      desired.x += state.pointer.x * parallax.x * 0.55;
+      desired.y += state.pointer.y * parallax.y * 0.55;
+      desired.x += Math.sin(elapsed * 0.075 + timeline.position * 0.47)
         * THREE.MathUtils.lerp(motionA.cameraDrift[0], motionB.cameraDrift[0], t);
-      desired.y += Math.sin(elapsed * 0.15 + 1.1 + timeline.position * 0.37)
+      desired.y += Math.sin(elapsed * 0.060 + 1.1 + timeline.position * 0.31)
         * THREE.MathUtils.lerp(motionA.cameraDrift[1], motionB.cameraDrift[1], t);
-      desired.z += Math.cos(elapsed * 0.17 + 0.4 + timeline.position * 0.41)
+      desired.z += Math.cos(elapsed * 0.065 + 0.4 + timeline.position * 0.36)
         * THREE.MathUtils.lerp(motionA.cameraDrift[2], motionB.cameraDrift[2], t);
     }
 
@@ -120,11 +114,11 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
 
     setSplineVector(lookTarget, state.size.width, timeline.from, t, "target");
     if (!reduced) {
-      lookTarget.x += state.pointer.x * parallax.x * 0.22;
-      lookTarget.y += state.pointer.y * parallax.y * 0.26;
-      lookTarget.x += Math.sin(elapsed * 0.13 + 0.8)
+      lookTarget.x += state.pointer.x * parallax.x * 0.11;
+      lookTarget.y += state.pointer.y * parallax.y * 0.13;
+      lookTarget.x += Math.sin(elapsed * 0.055 + 0.8)
         * THREE.MathUtils.lerp(motionA.cameraLookDrift[0], motionB.cameraLookDrift[0], t);
-      lookTarget.y += Math.cos(elapsed * 0.11 + 0.2)
+      lookTarget.y += Math.cos(elapsed * 0.048 + 0.2)
         * THREE.MathUtils.lerp(motionA.cameraLookDrift[1], motionB.cameraLookDrift[1], t);
     }
     state.camera.lookAt(lookTarget);
@@ -143,11 +137,11 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
       lightB.fromArray(b.keyLight);
       sun.current.position.copy(lightA.lerp(lightB, t));
       if (!reduced) {
-        sun.current.position.x += Math.sin(elapsed * 0.085)
+        sun.current.position.x += Math.sin(elapsed * 0.038)
           * THREE.MathUtils.lerp(motionA.sunOrbit[0], motionB.sunOrbit[0], t);
-        sun.current.position.y += Math.sin(elapsed * 0.061 + 0.7)
+        sun.current.position.y += Math.sin(elapsed * 0.031 + 0.7)
           * THREE.MathUtils.lerp(motionA.sunOrbit[1], motionB.sunOrbit[1], t);
-        sun.current.position.z += Math.cos(elapsed * 0.085)
+        sun.current.position.z += Math.cos(elapsed * 0.038)
           * THREE.MathUtils.lerp(motionA.sunOrbit[2], motionB.sunOrbit[2], t);
       }
       const prior = previousShadowSun.current;
@@ -156,17 +150,17 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
         if (prior) prior.copy(sun.current.position);
         else previousShadowSun.current = sun.current.position.clone();
       }
-      const pulse = reduced ? 0 : Math.sin(elapsed * 0.19 + progress * Math.PI * 2)
+      const pulse = reduced ? 0 : Math.sin(elapsed * 0.08 + progress * Math.PI * 2)
         * THREE.MathUtils.lerp(motionA.sunPulse, motionB.sunPulse, t);
       sun.current.intensity = THREE.MathUtils.damp(
         sun.current.intensity,
-        THREE.MathUtils.lerp(a.keyIntensity, b.keyIntensity, t) * (quality === "high" ? 1 : 0.9) * (1 + pulse),
+        THREE.MathUtils.lerp(a.keyIntensity, b.keyIntensity, t) * (quality === "high" ? 0.78 : 0.70) * (1 + pulse),
         storyMotion.lightDamping,
         delta,
       );
       accentA.set(a.accent);
       accentB.set(b.accent);
-      sun.current.color.copy(accentA).lerp(accentB, t).lerp(warm, 0.86);
+      sun.current.color.copy(accentA).lerp(accentB, t).lerp(warm, 0.90);
     }
 
     if (rim.current) {
@@ -175,29 +169,29 @@ export function CinematicCameraRig({ quality }: { quality: "high" | "medium" }) 
       rim.current.color.copy(accentA).lerp(accentB, t);
       rim.current.intensity = THREE.MathUtils.damp(
         rim.current.intensity,
-        THREE.MathUtils.lerp(a.rimIntensity, b.rimIntensity, t) * (quality === "high" ? 1 : 0.72),
+        THREE.MathUtils.lerp(a.rimIntensity, b.rimIntensity, t) * (quality === "high" ? 0.64 : 0.48),
         storyMotion.lightDamping,
         delta,
       );
     }
 
-    bgA.set(a.background);
-    bgB.set(b.background);
+    bgA.set(a.background).multiplyScalar(0.84);
+    bgB.set(b.background).multiplyScalar(0.84);
     bg.copy(bgA).lerp(bgB, t);
     if (state.scene.background instanceof THREE.Color) state.scene.background.lerp(bg, 1 - Math.exp(-delta * 4.2));
     if (state.scene.fog instanceof THREE.Fog) {
-      state.scene.fog.near = THREE.MathUtils.damp(state.scene.fog.near, THREE.MathUtils.lerp(a.fog[0], b.fog[0], t), 3.6, delta);
-      state.scene.fog.far = THREE.MathUtils.damp(state.scene.fog.far, THREE.MathUtils.lerp(a.fog[1], b.fog[1], t), 3.6, delta);
+      state.scene.fog.near = THREE.MathUtils.damp(state.scene.fog.near, THREE.MathUtils.lerp(a.fog[0], b.fog[0], t) + 4, 3.6, delta);
+      state.scene.fog.far = THREE.MathUtils.damp(state.scene.fog.far, THREE.MathUtils.lerp(a.fog[1], b.fog[1], t) + 12, 3.6, delta);
       state.scene.fog.color.lerp(bg, 1 - Math.exp(-delta * 4.2));
     }
   });
 
   return (
     <>
-      <hemisphereLight args={["#fffaf1", "#7f877f", quality === "high" ? 0.82 : 0.74]} />
-      <directionalLight ref={sun} position={[6, 10, 5]} intensity={2.2} castShadow />
-      <pointLight ref={rim} position={[-6, 4.5, -4]} intensity={5.8} distance={25} decay={2} />
-      <pointLight position={[3.5, 2.6, 5.5]} color="#ffd7a0" intensity={quality === "high" ? 1.12 : 0.62} distance={15} decay={2} />
+      <hemisphereLight args={["#ebe6dc", "#626963", quality === "high" ? 0.46 : 0.40]} />
+      <directionalLight ref={sun} position={[6, 10, 5]} intensity={1.7} castShadow />
+      <pointLight ref={rim} position={[-6, 4.5, -4]} intensity={3.2} distance={25} decay={2} />
+      <pointLight position={[3.5, 2.6, 5.5]} color="#d9b47c" intensity={quality === "high" ? 0.48 : 0.30} distance={15} decay={2} />
     </>
   );
 }
