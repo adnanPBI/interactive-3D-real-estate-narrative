@@ -31,6 +31,45 @@ function isPremiumMaterial(name: string): name is R61ManufacturingMaterialName {
   return Object.prototype.hasOwnProperty.call(r61MaterialNormalScale, name);
 }
 
+function applyCinematicPbrTuning(material: THREE.MeshStandardMaterial, glass: boolean) {
+  const name = material.name;
+  if (glass) {
+    material.color.offsetHSL(0, 0.01, -0.045);
+    material.roughness = Math.min(material.roughness, 0.09);
+    material.metalness = Math.max(material.metalness, 0.20);
+    material.envMapIntensity = 1.45;
+    return;
+  }
+
+  if (name.includes("Concrete")) {
+    material.color.multiplyScalar(0.88);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.62, 0.88);
+    material.metalness = Math.min(material.metalness, 0.08);
+    material.envMapIntensity = 0.72;
+  } else if (name.startsWith("Metal_") || name === "Steel" || name === "Aluminum") {
+    material.color.multiplyScalar(0.90);
+    material.metalness = Math.max(material.metalness, 0.68);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.22, 0.46);
+    material.envMapIntensity = 1.38;
+  } else if (name === "Graphite" || name === "Roof" || name === "Metal_Painted_Charcoal") {
+    material.color.multiplyScalar(0.76);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.36, 0.68);
+    material.metalness = Math.max(material.metalness, 0.22);
+    material.envMapIntensity = 1.02;
+  } else if (name === "Facade" || name === "Panel_White" || name === "White") {
+    material.color.multiplyScalar(0.94);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.38, 0.66);
+    material.metalness = Math.max(material.metalness, 0.10);
+    material.envMapIntensity = 1.12;
+  } else if (name === "Recycled") {
+    material.color.multiplyScalar(0.84);
+    material.roughness = Math.max(material.roughness, 0.72);
+    material.envMapIntensity = 0.78;
+  } else {
+    material.envMapIntensity = 1.04;
+  }
+}
+
 function configureMaterial(
   material: THREE.MeshStandardMaterial,
   legacyTextures: LegacyTextures,
@@ -40,45 +79,39 @@ function configureMaterial(
   const glass = r61GlassMaterials.has(material.name);
   if (glass) {
     material.transparent = true;
-    material.opacity = Math.min(material.opacity, 0.52);
+    material.opacity = Math.min(material.opacity, 0.48);
     material.depthWrite = false;
-    material.roughness = Math.min(material.roughness, 0.11);
-    material.metalness = Math.max(material.metalness, 0.16);
   } else {
-    // Critical R6 rule: solid architecture stays in the opaque depth pass.
     material.transparent = false;
     material.opacity = 1;
     material.depthWrite = true;
     material.alphaHash = false;
   }
 
-  // R6.1 rule: authored GLB textures always win. External material-specific maps
-  // fill only empty slots; the older hero-wide maps are a final legacy fallback.
   const premium = isPremiumMaterial(material.name) ? premiumTextures?.[material.name] : undefined;
   if (premium) {
     if (!material.map) material.map = premium.basecolor;
     if (!material.normalMap) {
       material.normalMap = premium.normal;
       const normalScale = r61MaterialNormalScale[material.name] ?? 0.12;
-      material.normalScale.set(normalScale, normalScale);
+      material.normalScale.set(normalScale * 1.15, normalScale * 1.15);
     }
     if (!material.roughnessMap) material.roughnessMap = premium.orm;
     if (!material.metalnessMap) material.metalnessMap = premium.orm;
-    if (!material.aoMap) {
-      material.aoMap = premium.orm;
-      material.aoMapIntensity = 0.88;
-    }
+    if (!material.aoMap) material.aoMap = premium.orm;
+    material.aoMapIntensity = 1.12;
   } else if (legacyTextures && shouldUseLegacyTexture(material.name)) {
     if (!material.map) material.map = legacyTextures.basecolor;
     if (!material.normalMap) {
       material.normalMap = legacyTextures.normal;
-      material.normalScale.set(0.16, 0.16);
+      material.normalScale.set(0.19, 0.19);
     }
     if (!material.roughnessMap) material.roughnessMap = legacyTextures.orm;
     if (!material.metalnessMap) material.metalnessMap = legacyTextures.orm;
   }
 
-  material.envMapIntensity = glass ? 1.20 : material.name.startsWith("Metal_") ? 1.08 : 0.96;
+  applyCinematicPbrTuning(material, glass);
+
   const slots: Array<[THREE.Texture | null, "color" | "data"]> = [
     [material.map, "color"],
     [material.emissiveMap, "color"],
@@ -92,7 +125,6 @@ function configureMaterial(
     texture.anisotropy = anisotropy;
     texture.minFilter = THREE.LinearMipmapLinearFilter;
     texture.magFilter = THREE.LinearFilter;
-    // KTX2 mips are authored/encoded offline; do not overwrite them at runtime.
   }
   material.needsUpdate = true;
   return glass;
@@ -118,7 +150,7 @@ export function HeroAsset({
   const { gltf, failed } = useSceneAsset(assetUrl);
   const legacyTextures = useR6HeroTextures(hero, hero !== "manufacturing-line");
   const premiumTextures = useR61MaterialTextures(hero, quality);
-  const anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), quality === "high" ? 8 : 4);
+  const anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), quality === "high" ? 12 : 6);
   const authored = modelTransform(definition, width);
   const motion = r612HeroMotion[hero];
 
@@ -160,9 +192,6 @@ export function HeroAsset({
   }, [anisotropy, gltf, legacyTextures, premiumTextures, quality]);
 
   useEffect(() => {
-    // Invalidate immediately when the caster identity or authored responsive
-    // transform changes, so removed/moved geometry cannot leave a stale shadow
-    // while the next GLB is resolving or the viewport crosses a breakpoint.
     renderer.shadowMap.needsUpdate = true;
   }, [assetUrl, authored, renderer]);
 
@@ -192,7 +221,6 @@ export function HeroAsset({
       rotation={authored.rotation as [number, number, number]}
       scale={authored.scale}
     >
-      {/* The authored GLB primitive remains byte-for-byte unchanged. Runtime motion is additive. */}
       {instance ? <primitive object={instance} /> : failed ? <mesh position={[0, 1, 0]}><boxGeometry args={[2.4, 1.4, 1.8]} /><meshStandardMaterial color="#4a4f4c" wireframe /></mesh> : null}
       <R6HeroAmbientMotion hero={hero} accent={definition.accent} quality={quality} />
       {hero === "integrated-campus" && <><R6InstancedSolarField compact /><R6InstancedTurbines count={2} quality={quality} wind={motion.wind} /><R6InstancedVegetation count={14} wind={motion.wind} /></>}
