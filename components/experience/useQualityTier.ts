@@ -41,7 +41,12 @@ function chooseQuality(): Quality {
   const weakRenderer = /SwiftShader|llvmpipe|Software/i.test(renderer);
 
   if (reduced || weakRenderer || cores <= 2 || memory <= 2) return "fallback";
-  if (saveData || slowConnection || integratedIntel || cores <= 6 || memory <= 4 || window.innerWidth < 820) return "medium";
+  if (saveData || slowConnection || cores <= 4 || memory <= 4 || window.innerWidth < 820) return "medium";
+
+  // Do not demote a capable desktop solely because it uses Intel Iris/UHD.
+  // The old rule forced many modern Windows laptops into lod1, which reduced the
+  // manufacturing hero from ~77k triangles to ~12k and visibly destroyed detail.
+  if (integratedIntel && (cores <= 6 || memory < 8)) return "medium";
   return "high";
 }
 
