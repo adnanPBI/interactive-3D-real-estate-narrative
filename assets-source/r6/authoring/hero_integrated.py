@@ -8,7 +8,6 @@ def build(ctx, lod: str):
     b = add_context(r4.Builder(f"r6-integrated-{lod}"), r4)
     density = {"lod0":1.0,"lod1":.72,"lod2":.42,"proxy":.18}[lod]
     high = lod == "lod0"
-    medium = lod == "lod1"
 
     # Bespoke operations / visitor center in the foreground.
     bevel_box(b,(5.4,2.55,2.9),(1.1,1.275,-.25),"Facade",.12)
@@ -35,25 +34,20 @@ def build(ctx, lod: str):
         safety_rail(b,(-1.25,0,2.00),(3.85,0,2.00),.72,20 if high else 12)
         service_stair(b,(3.70,0,1.05),.68,1.15,1.00,8,3.14)
         r4.pipe_rack(b,(-4.6,0,-3.4),(3.7,0,-3.4),1.58,.72,6 if high else 4)
-        # Dedicated electrical/service cabinets and cable tray.
         for x in (-3.95,-3.20,3.95):
             r5.control_cabinet(b,(x,0,1.95),.52,"CoolGlow")
         r5.cable_tray(b,(-4.4,0,-2.92),(3.4,0,-2.92),1.85,4 if high else 2,.82)
-        # Curbed service apron and access road improve site-scale realism.
-        b.box((9.2,.08,1.20),(-.6,.04,3.35),"Concrete")
-        b.box((9.0,.035,.62),(-.6,.10,3.34),"Graphite")
+        # Landscape only: no baked access road or vehicles in the campus hero.
         for p in [(-4.6,0,2.6),(-3.8,0,2.6),(-3.0,0,2.6),(4.4,0,2.6)]:
             r4.tree(b,p,.62)
 
     if high:
         r5.dense_switchyard(b,(5.6,0,2.65),True)
-        r5.high_turbine(b,(8.7,0,-2.55),.70,-.12)
+        # Turbines are runtime assemblies in R6.1.4 so their rotors can animate.
         for x in np.linspace(-7.8,-2.2,8):
             r4.solar_table(b,(float(x),.58,-3.65),.42)
         for x in (-4.7,-2.4,4.4):
             r4.street_light(b,(x,0,3.05),.72,1.57)
-        for x in (-4.2,-3.3,-2.4):
-            r4.parking_car(b,(x,0,3.15),.32,1.57,"Facade" if x < -3 else "White")
         for x in (4.55,5.35):
             r4.transformer_pad(b,(x,0,-2.25),.48)
 
