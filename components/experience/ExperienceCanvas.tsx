@@ -41,15 +41,15 @@ export function ExperienceCanvas({
         gl.setPixelRatio(Math.min(limits.maxDpr, Math.max(limits.minDpr, Math.min(deviceDpr, limits.initialDpr))));
         gl.outputColorSpace = THREE.SRGBColorSpace;
         gl.toneMapping = THREE.ACESFilmicToneMapping;
-        gl.toneMappingExposure = quality === "high" ? 1.06 : 1.09;
+        gl.toneMappingExposure = quality === "high" ? 0.90 : 0.94;
         gl.shadowMap.enabled = true;
         gl.shadowMap.type = THREE.PCFShadowMap;
         gl.shadowMap.autoUpdate = false;
         gl.shadowMap.needsUpdate = true;
       }}
     >
-      <color attach="background" args={["#eee7dc"]} />
-      <fog attach="fog" args={["#eee7dc", 15, 46]} />
+      <color attach="background" args={["#d8d5cf"]} />
+      <fog attach="fog" args={["#d8d5cf", 22, 68]} />
       <PerformanceGovernor quality={quality} />
       <StoryWorld quality={quality} onFirstSceneReady={onFirstSceneReady} />
       <R6PostFX quality={quality} />
