@@ -22,7 +22,6 @@ def build(ctx, lod: str):
     r4.conveyor(b,(-6.0,0,.86),(5.9,0,.86),.78,.84)
     r5.roller_bed(b,(-5.7,0,.10),(4.8,0,.10),.72,.62,48 if high else 28 if medium else 14,.90)
 
-    # Baler / optical-sort cabinets with readable service panels.
     for x in (-4.6,-3.65,1.1,2.0,2.9):
         bevel_box(b,(.72,1.35,.64),(x,.675,-.15),"White",.045)
         b.box((.48,.26,.025),(x,.84,.18),"BlackGlass")
@@ -37,7 +36,6 @@ def build(ctx, lod: str):
         safety_rail(b,(-6.0,0,-1.65),(5.0,0,-1.65),.72,22 if high else 13)
         service_stair(b,(5.7,0,-.15),.78,1.35,1.15,9,3.14)
         r5.cable_tray(b,(-5.6,0,-1.25),(4.6,0,-1.25),2.10,5 if high else 3,.80)
-        # Shredder hoppers and transfer chutes make the process sequence legible.
         for x in (-5.05,-2.05,.45):
             bevel_box(b,(.95,.68,.92),(x,1.42,.82),"Graphite",.055)
             b.box((.62,.70,.08),(x,1.06,.82),"Steel")
@@ -46,13 +44,11 @@ def build(ctx, lod: str):
                 r4.bale(b,(1.5+col*.56,0,2.05+row*.48),.38,"Recycled" if (row+col)%2 else "Steel")
 
     if high:
-        # Perimeter bins, piles and plant vehicles add scale and material variety.
+        # Static plant/process detail only; vehicles are intentionally omitted.
         for i,x in enumerate((-6.35,-5.35,-4.35)):
             bevel_box(b,(.82,.68,1.10),(x,.34,2.65),"Graphite" if i%2 else "Recycled",.05)
         r4.pile(b,(-6.3,.08,-3.1),.82,55,"Recycled",106)
         r4.pile(b,(-4.0,.08,-3.1),.68,42,"Steel",107)
-        r4.forklift(b,(1.4,0,2.8),.50,1.57)
-        r4.forklift(b,(-3.1,0,2.65),.44,-1.57)
         for p in [(-1.0,0,2.25),(3.4,0,2.5)]:
             r4.worker(b,p,.60)
         for x in (-5.8,-3.6,-1.4,3.6,5.4):
