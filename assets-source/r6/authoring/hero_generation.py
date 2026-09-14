@@ -21,7 +21,7 @@ def build(ctx, lod: str):
         b.cyl_between((float(x)-.32,1.72,-.85),(float(x)+.32,1.72,-.85),.026,"Aluminum",10)
         if high:
             # Busbar hardware, disconnect arms and control boxes.
-            b.box((.44,.07,.10),(float(x),1.52,-.62),"Copper")
+            b.box((.44,.07,.10),(float(x),1.52,-.62),"Bronze")
             b.box((.28,.40,.22),(float(x)+.28,.38,1.03),"Graphite")
 
     instrument_cluster(b,(2.8,0,2.25),12 if high else 7,.34,.9)
