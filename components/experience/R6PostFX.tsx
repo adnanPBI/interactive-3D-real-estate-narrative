@@ -8,6 +8,7 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
+import { SSAOPass } from "three/examples/jsm/postprocessing/SSAOPass.js";
 import { storyMotion } from "@/experience/config/storyMotion";
 import { finalizeRenderTelemetry, setSceneRenderTelemetry } from "@/experience/systems/renderTelemetry";
 import { useExperienceStore } from "@/lib/experienceStore";
@@ -29,10 +30,10 @@ class SceneTelemetryPass extends RenderPass {
 const architecturalGrade = {
   uniforms: {
     tDiffuse: { value: null },
-    contrast: { value: 0.20 },
-    saturation: { value: 1.04 },
-    gamma: { value: 0.97 },
-    vignette: { value: 0.10 },
+    contrast: { value: 0.18 },
+    saturation: { value: 1.035 },
+    gamma: { value: 0.98 },
+    vignette: { value: 0.08 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -58,7 +59,7 @@ const architecturalGrade = {
       float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
       color = mix(vec3(luma), color, saturation);
       vec2 p = vUv - 0.5;
-      float edge = smoothstep(0.20, 0.70, dot(p, p) * 1.55);
+      float edge = smoothstep(0.22, 0.72, dot(p, p) * 1.50);
       color *= 1.0 - edge * vignette;
       gl_FragColor = vec4(clamp(color, 0.0, 1.0), texel.a);
     }
@@ -66,9 +67,10 @@ const architecturalGrade = {
 };
 
 /**
- * Industrial output pipeline: MSAA + SMAA, then a restrained architectural
- * grade. Bloom is deliberately excluded because it lifted the pale materials
- * into the pale background and erased edge definition in the deployed scene.
+ * R6.1.3 industrial output pipeline.
+ * High quality adds restrained SSAO to reveal contact, rails, ducts and machinery
+ * depth. Bloom remains intentionally absent because it washed pale architecture
+ * into the editorial background in the earlier production pass.
  */
 export function R6PostFX({ quality }: { quality: "high" | "medium" }) {
   const gl = useThree((state) => state.gl);
@@ -91,11 +93,19 @@ export function R6PostFX({ quality }: { quality: "high" | "medium" }) {
     const next = new EffectComposer(gl, target);
     next.addPass(new SceneTelemetryPass(scene, camera));
 
+    if (quality === "high") {
+      const ssao = new SSAOPass(scene, camera, 1, 1);
+      ssao.kernelRadius = 7;
+      ssao.minDistance = 0.0015;
+      ssao.maxDistance = 0.085;
+      next.addPass(ssao);
+    }
+
     const grade = new ShaderPass(architecturalGrade);
-    grade.uniforms.contrast.value = quality === "high" ? 0.22 : 0.16;
-    grade.uniforms.saturation.value = quality === "high" ? 1.05 : 1.03;
-    grade.uniforms.gamma.value = quality === "high" ? 0.96 : 0.98;
-    grade.uniforms.vignette.value = quality === "high" ? 0.10 : 0.07;
+    grade.uniforms.contrast.value = quality === "high" ? 0.19 : 0.14;
+    grade.uniforms.saturation.value = quality === "high" ? 1.04 : 1.025;
+    grade.uniforms.gamma.value = quality === "high" ? 0.975 : 0.99;
+    grade.uniforms.vignette.value = quality === "high" ? 0.085 : 0.055;
     next.addPass(grade);
 
     next.addPass(new SMAAPass());
