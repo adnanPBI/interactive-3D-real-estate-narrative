@@ -31,40 +31,47 @@ function isPremiumMaterial(name: string): name is R61ManufacturingMaterialName {
 function applyCinematicPbrTuning(material: THREE.MeshStandardMaterial, glass: boolean) {
   const name = material.name;
   if (glass) {
-    material.color.multiplyScalar(0.86);
-    material.roughness = Math.min(material.roughness, 0.12);
-    material.metalness = Math.max(material.metalness, 0.18);
-    material.envMapIntensity = 1.08;
+    // Stable architectural glazing: tinted/reflective rather than transparent.
+    // This removes camera-dependent transparent sorting shimmer/blinking.
+    material.color.set("#33474f");
+    material.roughness = 0.18;
+    material.metalness = 0.34;
+    material.envMapIntensity = 1.18;
     return;
   }
 
   if (name.includes("Concrete")) {
-    material.color.multiplyScalar(0.74);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.68, 0.90);
-    material.metalness = Math.min(material.metalness, 0.05);
-    material.envMapIntensity = 0.54;
+    material.color.multiplyScalar(0.72);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.70, 0.91);
+    material.metalness = Math.min(material.metalness, 0.04);
+    material.envMapIntensity = 0.50;
   } else if (name.startsWith("Metal_") || name === "Steel" || name === "Aluminum") {
-    material.color.multiplyScalar(0.78);
-    material.metalness = Math.max(material.metalness, 0.62);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.26, 0.50);
-    material.envMapIntensity = 1.02;
+    material.color.multiplyScalar(0.76);
+    material.metalness = Math.max(material.metalness, 0.68);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.24, 0.46);
+    material.envMapIntensity = 1.08;
   } else if (name === "Graphite" || name === "Roof" || name === "Metal_Painted_Charcoal") {
-    material.color.multiplyScalar(0.62);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.42, 0.72);
-    material.metalness = Math.max(material.metalness, 0.18);
+    material.color.multiplyScalar(0.58);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.40, 0.68);
+    material.metalness = Math.max(material.metalness, 0.20);
     material.envMapIntensity = 0.82;
   } else if (name === "Facade" || name === "Panel_White" || name === "White") {
-    material.color.multiplyScalar(0.82);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.44, 0.70);
-    material.metalness = Math.max(material.metalness, 0.06);
-    material.envMapIntensity = 0.86;
+    material.color.multiplyScalar(0.79);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.40, 0.66);
+    material.metalness = Math.max(material.metalness, 0.08);
+    material.envMapIntensity = 0.84;
   } else if (name === "Recycled") {
-    material.color.multiplyScalar(0.72);
-    material.roughness = Math.max(material.roughness, 0.76);
-    material.envMapIntensity = 0.64;
+    material.color.multiplyScalar(0.69);
+    material.roughness = Math.max(material.roughness, 0.78);
+    material.envMapIntensity = 0.60;
+  } else if (name.includes("Copper") || name.includes("Bronze") || name.includes("Accent")) {
+    material.color.offsetHSL(0, 0.06, -0.04);
+    material.metalness = Math.max(material.metalness, 0.58);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.26, 0.50);
+    material.envMapIntensity = 1.04;
   } else {
-    material.color.multiplyScalar(0.88);
-    material.envMapIntensity = 0.82;
+    material.color.multiplyScalar(0.84);
+    material.envMapIntensity = 0.78;
   }
 }
 
@@ -75,16 +82,15 @@ function configureMaterial(
   anisotropy: number,
 ) {
   const glass = r61GlassMaterials.has(material.name);
-  if (glass) {
-    material.transparent = true;
-    material.opacity = Math.min(material.opacity, 0.44);
-    material.depthWrite = false;
-  } else {
-    material.transparent = false;
-    material.opacity = 1;
-    material.depthWrite = true;
-    material.alphaHash = false;
-  }
+
+  // All structural materials, including glazing, stay in the stable opaque depth
+  // pass. The R6 assets contain layered façade strips where transparent sorting
+  // caused repeated component shimmer during slow camera movement.
+  material.transparent = false;
+  material.opacity = 1;
+  material.depthWrite = true;
+  material.depthTest = true;
+  material.alphaHash = false;
 
   const premium = isPremiumMaterial(material.name) ? premiumTextures?.[material.name] : undefined;
   if (premium) {
@@ -92,17 +98,17 @@ function configureMaterial(
     if (!material.normalMap) {
       material.normalMap = premium.normal;
       const normalScale = r61MaterialNormalScale[material.name] ?? 0.12;
-      material.normalScale.set(normalScale * 1.08, normalScale * 1.08);
+      material.normalScale.set(normalScale * 1.12, normalScale * 1.12);
     }
     if (!material.roughnessMap) material.roughnessMap = premium.orm;
     if (!material.metalnessMap) material.metalnessMap = premium.orm;
     if (!material.aoMap) material.aoMap = premium.orm;
-    material.aoMapIntensity = 1.18;
+    material.aoMapIntensity = 1.28;
   } else if (legacyTextures && shouldUseLegacyTexture(material.name)) {
     if (!material.map) material.map = legacyTextures.basecolor;
     if (!material.normalMap) {
       material.normalMap = legacyTextures.normal;
-      material.normalScale.set(0.17, 0.17);
+      material.normalScale.set(0.18, 0.18);
     }
     if (!material.roughnessMap) material.roughnessMap = legacyTextures.orm;
     if (!material.metalnessMap) material.metalnessMap = legacyTextures.orm;
@@ -163,7 +169,7 @@ export function HeroAsset({
   const { gltf, failed } = useSceneAsset(assetUrl);
   const legacyTextures = useR6HeroTextures(hero, hero !== "manufacturing-line");
   const premiumTextures = useR61MaterialTextures(hero, quality);
-  const anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), quality === "high" ? 12 : 6);
+  const anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), quality === "high" ? 16 : 8);
   const authored = modelTransform(definition, width);
 
   const { instance, bindings, bounds } = useMemo(() => {
@@ -191,14 +197,9 @@ export function HeroAsset({
         return material;
       });
       mesh.material = Array.isArray(mesh.material) ? materials : materials[0];
-      const names = materials.map((material) => material.name);
-      const transparentOnly = names.every((name) => r61GlassMaterials.has(name));
-      const structural = names.some((name) => [
-        "Facade", "Concrete", "Steel", "Graphite", "Aluminum",
-        "Concrete_Floor", "Concrete_Wall", "Metal_Painted_Charcoal", "Metal_Steel", "Metal_Aluminum", "Panel_White",
-      ].includes(name));
-      mesh.castShadow = !transparentOnly && (quality === "high" || structural);
-      mesh.receiveShadow = !transparentOnly;
+      mesh.castShadow = quality === "high";
+      mesh.receiveShadow = true;
+      mesh.renderOrder = 0;
     });
     return { instance: clone, bindings: nextBindings, bounds: localBounds(clone) };
   }, [anisotropy, gltf, legacyTextures, premiumTextures, quality]);
