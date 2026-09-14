@@ -46,9 +46,9 @@ def build(ctx, lod: str):
         service_stair(b,(4.65,0,1.00),.68,1.35,1.10,9,3.14)
         # Cooling-water headers and risers.
         for z in (-.30,-1.05):
-            b.cyl_between((-5.9,1.18,z),(-2.0,1.18,z),.055,"Copper",14)
+            b.cyl_between((-5.9,1.18,z),(-2.0,1.18,z),.055,"Bronze",14)
         for x in (-5.5,-4.3,-3.1,-2.1):
-            b.cyl(.055,1.15,(x,.575,-.30),"Copper",sections=14)
+            b.cyl(.055,1.15,(x,.575,-.30),"Bronze",sections=14)
 
     if high:
         # External visible rack/service zone and rooftop maintenance walkways.
