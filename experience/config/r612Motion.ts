@@ -41,82 +41,70 @@ export type R612HeroMotionProfile = {
 };
 
 /**
- * Runtime-only motion art direction for R6.1.2.
- *
- * These values never modify, regenerate, retopologize, re-export or replace an
- * authored GLB/KTX2/fallback asset. They only drive React Three Fiber transforms,
- * lightweight procedural effects and the existing cinematic lights/camera.
+ * R6.1.2 motion art direction.
+ * Motion is intentionally slow and industrial rather than arcade-like.  The
+ * positional fields remain as compatibility metadata; runtime placement is
+ * resolved against the loaded hero bounds in R6AmbientMotion.
  */
 export const r612HeroMotion: Record<R6HeroId, R612HeroMotionProfile> = {
   "integrated-campus": {
-    wind: 0.82,
-    cameraDrift: [0.10, 0.055, 0.075],
-    cameraLookDrift: [0.035, 0.022],
-    sunOrbit: [0.34, 0.10, 0.24],
-    sunPulse: 0.028,
-    steam: [],
-    water: [],
-    runner: { x: 5.2, y: 0.045, z: -1.5, length: 14, speed: 0.78, laneOffset: 0.36, opacity: 0.18 },
+    wind: 0.62,
+    cameraDrift: [0.028, 0.014, 0.018],
+    cameraLookDrift: [0.010, 0.007],
+    sunOrbit: [0.12, 0.04, 0.08],
+    sunPulse: 0.012,
+    steam: [], water: [],
+    runner: { x: 0, y: 0, z: 0, length: 1, speed: 0.26, laneOffset: 0.30, opacity: 1 },
   },
   "manufacturing-line": {
-    wind: 0.38,
-    cameraDrift: [0.075, 0.035, 0.055],
-    cameraLookDrift: [0.024, 0.018],
-    sunOrbit: [0.24, 0.075, 0.18],
-    sunPulse: 0.022,
-    steam: [
-      { position: [3.6, 2.0, -2.15], spread: [0.55, 0.42], rise: 2.2, opacity: 0.16, tint: "#e8e3da" },
-    ],
+    wind: 0.28,
+    cameraDrift: [0.022, 0.012, 0.016],
+    cameraLookDrift: [0.008, 0.006],
+    sunOrbit: [0.09, 0.03, 0.065],
+    sunPulse: 0.010,
+    steam: [{ position: [0, 0, 0], spread: [0.42, 0.30], rise: 1.65, opacity: 0.12, tint: "#d8d9d6" }],
     water: [],
-    runner: { x: 5.5, y: 0.045, z: -1.3, length: 13, speed: 0.58, laneOffset: 0.34, opacity: 0.15 },
+    runner: { x: 0, y: 0, z: 0, length: 1, speed: 0.22, laneOffset: 0.28, opacity: 1 },
   },
   "substation-bess": {
-    wind: 1.25,
-    cameraDrift: [0.12, 0.07, 0.09],
-    cameraLookDrift: [0.036, 0.024],
-    sunOrbit: [0.42, 0.12, 0.31],
-    sunPulse: 0.035,
-    steam: [],
-    water: [],
-    runner: { x: 5.7, y: 0.045, z: -1.8, length: 16, speed: 0.88, laneOffset: 0.38, opacity: 0.16 },
+    wind: 0.88,
+    cameraDrift: [0.030, 0.016, 0.021],
+    cameraLookDrift: [0.011, 0.007],
+    sunOrbit: [0.14, 0.045, 0.10],
+    sunPulse: 0.014,
+    steam: [], water: [],
+    runner: { x: 0, y: 0, z: 0, length: 1, speed: 0.28, laneOffset: 0.30, opacity: 1 },
   },
   "data-center-cooling": {
-    wind: 0.72,
-    cameraDrift: [0.065, 0.035, 0.052],
-    cameraLookDrift: [0.020, 0.016],
-    sunOrbit: [0.20, 0.065, 0.15],
-    sunPulse: 0.018,
+    wind: 0.48,
+    cameraDrift: [0.020, 0.010, 0.014],
+    cameraLookDrift: [0.007, 0.005],
+    sunOrbit: [0.08, 0.026, 0.055],
+    sunPulse: 0.009,
     steam: [
-      { position: [-2.65, 2.0, -2.0], spread: [0.45, 0.36], rise: 2.65, opacity: 0.22, tint: "#e7eceb" },
-      { position: [-1.35, 2.05, -2.0], spread: [0.42, 0.34], rise: 2.45, opacity: 0.19, tint: "#e7eceb" },
+      { position: [0, 0, 0], spread: [0.34, 0.26], rise: 1.85, opacity: 0.14, tint: "#dde2df" },
+      { position: [0, 0, 0], spread: [0.32, 0.25], rise: 1.70, opacity: 0.12, tint: "#dde2df" },
     ],
-    water: [
-      { position: [-1.85, 0.075, -2.85], rotationY: 0.02, size: [4.8, 1.55], opacity: 0.28, tint: "#6d9dad", speed: 0.42 },
-    ],
-    runner: { x: 5.2, y: 0.045, z: -1.6, length: 13, speed: 0.48, laneOffset: 0.34, opacity: 0.12 },
+    water: [],
+    runner: { x: 0, y: 0, z: 0, length: 1, speed: 0.20, laneOffset: 0.27, opacity: 1 },
   },
   "recycling-intake": {
-    wind: 0.92,
-    cameraDrift: [0.085, 0.048, 0.066],
-    cameraLookDrift: [0.030, 0.020],
-    sunOrbit: [0.30, 0.085, 0.22],
-    sunPulse: 0.028,
-    steam: [
-      { position: [-2.9, 1.35, 0.55], spread: [0.72, 0.48], rise: 1.65, opacity: 0.14, tint: "#c8c2b7" },
-    ],
-    water: [
-      { position: [-1.95, 0.065, 2.65], rotationY: -0.04, size: [3.9, 1.15], opacity: 0.18, tint: "#82999a", speed: 0.34 },
-    ],
-    runner: { x: 5.0, y: 0.045, z: -1.25, length: 13, speed: 0.72, laneOffset: 0.35, opacity: 0.14 },
+    wind: 0.58,
+    cameraDrift: [0.024, 0.013, 0.017],
+    cameraLookDrift: [0.009, 0.006],
+    sunOrbit: [0.10, 0.032, 0.07],
+    sunPulse: 0.011,
+    steam: [{ position: [0, 0, 0], spread: [0.48, 0.32], rise: 1.35, opacity: 0.10, tint: "#c8c3ba" }],
+    water: [],
+    runner: { x: 0, y: 0, z: 0, length: 1, speed: 0.24, laneOffset: 0.28, opacity: 1 },
   },
   "connected-campus": {
-    wind: 0.98,
-    cameraDrift: [0.11, 0.065, 0.082],
-    cameraLookDrift: [0.034, 0.023],
-    sunOrbit: [0.38, 0.11, 0.28],
-    sunPulse: 0.032,
-    steam: [],
-    water: [],
-    runner: { x: 5.35, y: 0.045, z: -1.55, length: 15, speed: 0.82, laneOffset: 0.37, opacity: 0.18 },
+    wind: 0.64,
+    cameraDrift: [0.027, 0.014, 0.019],
+    cameraLookDrift: [0.010, 0.006],
+    sunOrbit: [0.12, 0.038, 0.085],
+    sunPulse: 0.012,
+    steam: [], water: [],
+    runner: { x: 0, y: 0, z: 0, length: 1, speed: 0.25, laneOffset: 0.29, opacity: 1 },
   },
 };
