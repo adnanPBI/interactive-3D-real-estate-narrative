@@ -6,7 +6,6 @@ import * as THREE from "three";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { modelTransform, type SceneDefinition } from "@/experience/config/scenes";
 import { r6HeroUrl, type R6HeroId } from "@/experience/config/r6Assets";
-import { r612HeroMotion } from "@/experience/config/r612Motion";
 import {
   r61GlassMaterials,
   r61MaterialNormalScale,
@@ -16,11 +15,9 @@ import type { R6Lod } from "@/experience/systems/HeroActivation";
 import { useSceneAsset } from "./useSceneAsset";
 import { useR6HeroTextures } from "./useR6HeroTextures";
 import { useR61MaterialTextures, type R61MaterialTextures } from "./useR61MaterialTextures";
-import { R6InstancedSolarField, R6InstancedTurbines, R6InstancedVegetation } from "./InstancedInfrastructure";
-import { R6HeroAmbientMotion } from "./R6AmbientMotion";
+import { R6HeroAmbientMotion, type HeroLocalBounds } from "./R6AmbientMotion";
 
 type Binding = { material: THREE.MeshStandardMaterial; glass: boolean };
-
 type LegacyTextures = ReturnType<typeof useR6HeroTextures>;
 
 function shouldUseLegacyTexture(name: string) {
@@ -34,39 +31,40 @@ function isPremiumMaterial(name: string): name is R61ManufacturingMaterialName {
 function applyCinematicPbrTuning(material: THREE.MeshStandardMaterial, glass: boolean) {
   const name = material.name;
   if (glass) {
-    material.color.offsetHSL(0, 0.01, -0.045);
-    material.roughness = Math.min(material.roughness, 0.09);
-    material.metalness = Math.max(material.metalness, 0.20);
-    material.envMapIntensity = 1.45;
+    material.color.multiplyScalar(0.86);
+    material.roughness = Math.min(material.roughness, 0.12);
+    material.metalness = Math.max(material.metalness, 0.18);
+    material.envMapIntensity = 1.08;
     return;
   }
 
   if (name.includes("Concrete")) {
-    material.color.multiplyScalar(0.88);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.62, 0.88);
-    material.metalness = Math.min(material.metalness, 0.08);
-    material.envMapIntensity = 0.72;
+    material.color.multiplyScalar(0.74);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.68, 0.90);
+    material.metalness = Math.min(material.metalness, 0.05);
+    material.envMapIntensity = 0.54;
   } else if (name.startsWith("Metal_") || name === "Steel" || name === "Aluminum") {
-    material.color.multiplyScalar(0.90);
-    material.metalness = Math.max(material.metalness, 0.68);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.22, 0.46);
-    material.envMapIntensity = 1.38;
-  } else if (name === "Graphite" || name === "Roof" || name === "Metal_Painted_Charcoal") {
-    material.color.multiplyScalar(0.76);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.36, 0.68);
-    material.metalness = Math.max(material.metalness, 0.22);
+    material.color.multiplyScalar(0.78);
+    material.metalness = Math.max(material.metalness, 0.62);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.26, 0.50);
     material.envMapIntensity = 1.02;
+  } else if (name === "Graphite" || name === "Roof" || name === "Metal_Painted_Charcoal") {
+    material.color.multiplyScalar(0.62);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.42, 0.72);
+    material.metalness = Math.max(material.metalness, 0.18);
+    material.envMapIntensity = 0.82;
   } else if (name === "Facade" || name === "Panel_White" || name === "White") {
-    material.color.multiplyScalar(0.94);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.38, 0.66);
-    material.metalness = Math.max(material.metalness, 0.10);
-    material.envMapIntensity = 1.12;
+    material.color.multiplyScalar(0.82);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.44, 0.70);
+    material.metalness = Math.max(material.metalness, 0.06);
+    material.envMapIntensity = 0.86;
   } else if (name === "Recycled") {
-    material.color.multiplyScalar(0.84);
-    material.roughness = Math.max(material.roughness, 0.72);
-    material.envMapIntensity = 0.78;
+    material.color.multiplyScalar(0.72);
+    material.roughness = Math.max(material.roughness, 0.76);
+    material.envMapIntensity = 0.64;
   } else {
-    material.envMapIntensity = 1.04;
+    material.color.multiplyScalar(0.88);
+    material.envMapIntensity = 0.82;
   }
 }
 
@@ -79,7 +77,7 @@ function configureMaterial(
   const glass = r61GlassMaterials.has(material.name);
   if (glass) {
     material.transparent = true;
-    material.opacity = Math.min(material.opacity, 0.48);
+    material.opacity = Math.min(material.opacity, 0.44);
     material.depthWrite = false;
   } else {
     material.transparent = false;
@@ -94,17 +92,17 @@ function configureMaterial(
     if (!material.normalMap) {
       material.normalMap = premium.normal;
       const normalScale = r61MaterialNormalScale[material.name] ?? 0.12;
-      material.normalScale.set(normalScale * 1.15, normalScale * 1.15);
+      material.normalScale.set(normalScale * 1.08, normalScale * 1.08);
     }
     if (!material.roughnessMap) material.roughnessMap = premium.orm;
     if (!material.metalnessMap) material.metalnessMap = premium.orm;
     if (!material.aoMap) material.aoMap = premium.orm;
-    material.aoMapIntensity = 1.12;
+    material.aoMapIntensity = 1.18;
   } else if (legacyTextures && shouldUseLegacyTexture(material.name)) {
     if (!material.map) material.map = legacyTextures.basecolor;
     if (!material.normalMap) {
       material.normalMap = legacyTextures.normal;
-      material.normalScale.set(0.19, 0.19);
+      material.normalScale.set(0.17, 0.17);
     }
     if (!material.roughnessMap) material.roughnessMap = legacyTextures.orm;
     if (!material.metalnessMap) material.metalnessMap = legacyTextures.orm;
@@ -130,6 +128,21 @@ function configureMaterial(
   return glass;
 }
 
+function localBounds(object: THREE.Object3D | null): HeroLocalBounds | null {
+  if (!object) return null;
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  if (box.isEmpty()) return null;
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  return {
+    min: [box.min.x, box.min.y, box.min.z],
+    max: [box.max.x, box.max.y, box.max.z],
+    center: [center.x, center.y, center.z],
+    size: [size.x, size.y, size.z],
+  };
+}
+
 export function HeroAsset({
   hero,
   lod,
@@ -152,10 +165,9 @@ export function HeroAsset({
   const premiumTextures = useR61MaterialTextures(hero, quality);
   const anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), quality === "high" ? 12 : 6);
   const authored = modelTransform(definition, width);
-  const motion = r612HeroMotion[hero];
 
-  const { instance, bindings } = useMemo(() => {
-    if (!gltf) return { instance: null, bindings: [] as Binding[] };
+  const { instance, bindings, bounds } = useMemo(() => {
+    if (!gltf) return { instance: null, bindings: [] as Binding[], bounds: null as HeroLocalBounds | null };
     const clone = skeletonClone(gltf.scene);
     const materialMap = new Map<THREE.Material, THREE.MeshStandardMaterial>();
     const nextBindings: Binding[] = [];
@@ -188,7 +200,7 @@ export function HeroAsset({
       mesh.castShadow = !transparentOnly && (quality === "high" || structural);
       mesh.receiveShadow = !transparentOnly;
     });
-    return { instance: clone, bindings: nextBindings };
+    return { instance: clone, bindings: nextBindings, bounds: localBounds(clone) };
   }, [anisotropy, gltf, legacyTextures, premiumTextures, quality]);
 
   useEffect(() => {
@@ -212,6 +224,7 @@ export function HeroAsset({
       if (window.__CONVALT_ACTIVE_HERO__?.url === assetUrl) window.__CONVALT_ACTIVE_HERO__ = undefined;
     };
   }, [assetUrl, hero, instance, lod]);
+
   useEffect(() => () => { for (const { material } of bindings) material.dispose(); }, [bindings]);
 
   return (
@@ -222,12 +235,7 @@ export function HeroAsset({
       scale={authored.scale}
     >
       {instance ? <primitive object={instance} /> : failed ? <mesh position={[0, 1, 0]}><boxGeometry args={[2.4, 1.4, 1.8]} /><meshStandardMaterial color="#4a4f4c" wireframe /></mesh> : null}
-      <R6HeroAmbientMotion hero={hero} accent={definition.accent} quality={quality} />
-      {hero === "integrated-campus" && <><R6InstancedSolarField compact /><R6InstancedTurbines count={2} quality={quality} wind={motion.wind} /><R6InstancedVegetation count={14} wind={motion.wind} /></>}
-      {hero === "substation-bess" && <><R6InstancedSolarField /><R6InstancedTurbines count={2} quality={quality} wind={motion.wind} /></>}
-      {hero === "data-center-cooling" && <R6InstancedVegetation count={12} wind={motion.wind} />}
-      {hero === "recycling-intake" && <R6InstancedVegetation count={12} wind={motion.wind} />}
-      {hero === "connected-campus" && <><R6InstancedSolarField compact /><R6InstancedTurbines count={1} quality={quality} wind={motion.wind} /><R6InstancedVegetation count={12} wind={motion.wind} /></>}
+      <R6HeroAmbientMotion hero={hero} accent={definition.accent} quality={quality} bounds={bounds} />
     </group>
   );
 }
