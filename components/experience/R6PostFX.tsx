@@ -8,7 +8,6 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { storyMotion } from "@/experience/config/storyMotion";
 import { finalizeRenderTelemetry, setSceneRenderTelemetry } from "@/experience/systems/renderTelemetry";
 import { useExperienceStore } from "@/lib/experienceStore";
@@ -27,12 +26,13 @@ class SceneTelemetryPass extends RenderPass {
   }
 }
 
-const cinematicGrade = {
+const architecturalGrade = {
   uniforms: {
     tDiffuse: { value: null },
-    contrast: { value: 0.12 },
-    saturation: { value: 1.08 },
-    vignette: { value: 0.17 },
+    contrast: { value: 0.20 },
+    saturation: { value: 1.04 },
+    gamma: { value: 0.97 },
+    vignette: { value: 0.10 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -47,27 +47,28 @@ const cinematicGrade = {
     uniform sampler2D tDiffuse;
     uniform float contrast;
     uniform float saturation;
+    uniform float gamma;
     uniform float vignette;
 
     void main() {
       vec4 texel = texture2D(tDiffuse, vUv);
-      vec3 color = texel.rgb;
+      vec3 color = max(texel.rgb, vec3(0.0));
+      color = pow(color, vec3(gamma));
       color = (color - 0.5) * (1.0 + contrast) + 0.5;
       float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
       color = mix(vec3(luma), color, saturation);
       vec2 p = vUv - 0.5;
-      float edge = smoothstep(0.22, 0.72, dot(p, p) * 1.65);
+      float edge = smoothstep(0.20, 0.70, dot(p, p) * 1.55);
       color *= 1.0 - edge * vignette;
-      gl_FragColor = vec4(max(color, 0.0), texel.a);
+      gl_FragColor = vec4(clamp(color, 0.0, 1.0), texel.a);
     }
   `,
 };
 
 /**
- * R6.1.2 cinematic output pipeline. Native MSAA + SMAA remain the anti-aliasing
- * foundation. A deliberately restrained bloom pass lets practical/emissive
- * motion read, while the grade restores depth that was previously washed out by
- * the pale editorial background and fog.
+ * Industrial output pipeline: MSAA + SMAA, then a restrained architectural
+ * grade. Bloom is deliberately excluded because it lifted the pale materials
+ * into the pale background and erased edge definition in the deployed scene.
  */
 export function R6PostFX({ quality }: { quality: "high" | "medium" }) {
   const gl = useThree((state) => state.gl);
@@ -90,18 +91,11 @@ export function R6PostFX({ quality }: { quality: "high" | "medium" }) {
     const next = new EffectComposer(gl, target);
     next.addPass(new SceneTelemetryPass(scene, camera));
 
-    const bloom = new UnrealBloomPass(
-      new THREE.Vector2(1, 1),
-      quality === "high" ? 0.24 : 0.14,
-      quality === "high" ? 0.42 : 0.34,
-      0.84,
-    );
-    next.addPass(bloom);
-
-    const grade = new ShaderPass(cinematicGrade);
-    grade.uniforms.contrast.value = quality === "high" ? 0.14 : 0.10;
-    grade.uniforms.saturation.value = quality === "high" ? 1.10 : 1.06;
-    grade.uniforms.vignette.value = quality === "high" ? 0.18 : 0.12;
+    const grade = new ShaderPass(architecturalGrade);
+    grade.uniforms.contrast.value = quality === "high" ? 0.22 : 0.16;
+    grade.uniforms.saturation.value = quality === "high" ? 1.05 : 1.03;
+    grade.uniforms.gamma.value = quality === "high" ? 0.96 : 0.98;
+    grade.uniforms.vignette.value = quality === "high" ? 0.10 : 0.07;
     next.addPass(grade);
 
     next.addPass(new SMAAPass());
