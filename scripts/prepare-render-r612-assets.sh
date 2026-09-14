@@ -21,7 +21,7 @@ awk '/^H4sI/{capture=1} capture && /^B64$/{exit} capture{print}' .github/workflo
 test -s "$payload"
 base64 -d "$payload" | gunzip > scripts/author-r61-manufacturing-source.py
 
-rm -rf assets-source/r6/heroes/manufacturing-line
+rm -rf assets-source/r6/heroes/manufacturing-line public/models/r6/hero public/textures/r6
 python3 scripts/author-r61-manufacturing-source.py
 
 expected_sha="896f4a4c4d1fca72d36b6e76f5c44d74d1b59338f4b5374a25295665af1b4d8e"
@@ -33,9 +33,8 @@ if [[ "$actual_sha" != "$expected_sha" ]]; then
 fi
 
 npm run validate:r61:source
-npm run assets:r6
-npm run validate:corporate:r6
-npm run validate:r6:proxy
+python3 scripts/run-r61-render-build.py
 npm run prove:r6:cpu-fallback
+python3 scripts/validate-r61-render-runtime.py
 
 echo "R6 Render asset bootstrap complete."
