@@ -66,11 +66,11 @@ const fallback = (name: LegacyAssetName) => {
 };
 
 /**
- * R6.1.3 composition pass.
- * The canonical LOD0 bounds are roughly 15–18 units wide. Previous desktop
- * scales of .69–.78 made the assets wider than the copy-safe viewport column.
- * These transforms are calibrated to keep the entire industrial hero inside its
- * half of the composition while preserving enough scale for readable detail.
+ * R6.1.5 annotated composition pass.
+ * Client review called the R6.1.3 assets too small. The desktop transforms below
+ * restore roughly 22-27% more visual area while keeping each hero anchored on
+ * its existing side of the editorial copy. Tablet/mobile receive a smaller lift
+ * to avoid clipping on narrow layouts.
  */
 export const sceneDefinitions: readonly SceneDefinition[] = [
   {
@@ -81,21 +81,21 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
     asset: asset("hero-campus"),
     fallback: fallback("hero-campus"),
     camera: {
-      desktop: { position: [10.8, 5.8, 14.8], target: [2.55, 0.95, -0.10], fov: 39 },
-      tablet: { position: [7.8, 5.4, 15.3], target: [0.85, 0.95, 0.00], fov: 43 },
-      mobile: { position: [3.3, 5.0, 16.2], target: [0.1, 0.92, 0.35], fov: 50 },
+      desktop: { position: [10.5, 5.65, 14.3], target: [2.55, 0.95, -0.10], fov: 38 },
+      tablet: { position: [7.6, 5.3, 14.9], target: [0.85, 0.95, 0.00], fov: 42 },
+      mobile: { position: [3.3, 4.9, 15.8], target: [0.1, 0.92, 0.35], fov: 49 },
     },
     model: {
-      desktop: { position: [4.05, -1.34, 0.12], rotation: [0, -0.15, 0], scale: 0.54 },
-      tablet: { position: [0.70, -1.34, 0.12], rotation: [0, -0.13, 0], scale: 0.53 },
-      mobile: { position: [0.0, -1.34, 0.62], rotation: [0, -0.08, 0], scale: 0.46 },
+      desktop: { position: [3.95, -1.34, 0.12], rotation: [0, -0.15, 0], scale: 0.68 },
+      tablet: { position: [0.66, -1.34, 0.12], rotation: [0, -0.13, 0], scale: 0.61 },
+      mobile: { position: [0.0, -1.34, 0.62], rotation: [0, -0.08, 0], scale: 0.50 },
     },
     accent: "#3d5a80",
-    background: "#ded8cd",
-    fog: [26, 72],
+    background: "#e3ddd3",
+    fog: [28, 78],
     keyLight: [6.8, 10.8, 4.8],
-    keyIntensity: 1.86,
-    rimIntensity: 2.28,
+    keyIntensity: 2.00,
+    rimIntensity: 2.38,
   },
   {
     id: "manufacturing",
@@ -105,21 +105,21 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
     asset: asset("manufacturing"),
     fallback: fallback("manufacturing"),
     camera: {
-      desktop: { position: [10.4, 5.5, 14.5], target: [2.45, 1.05, -0.05], fov: 40 },
-      tablet: { position: [7.2, 5.2, 15.0], target: [0.65, 1.02, 0.02], fov: 44 },
-      mobile: { position: [3.0, 4.7, 16.0], target: [0.15, 1.0, 0.42], fov: 51 },
+      desktop: { position: [10.0, 5.35, 14.0], target: [2.45, 1.05, -0.05], fov: 39 },
+      tablet: { position: [7.0, 5.1, 14.6], target: [0.65, 1.02, 0.02], fov: 43 },
+      mobile: { position: [3.0, 4.6, 15.6], target: [0.15, 1.0, 0.42], fov: 50 },
     },
     model: {
-      desktop: { position: [3.85, -1.34, 0.06], rotation: [0, -0.09, 0], scale: 0.56 },
-      tablet: { position: [0.60, -1.35, 0.13], rotation: [0, -0.07, 0], scale: 0.54 },
-      mobile: { position: [0.0, -1.35, 0.68], rotation: [0, -0.04, 0], scale: 0.47 },
+      desktop: { position: [3.72, -1.34, 0.06], rotation: [0, -0.09, 0], scale: 0.70 },
+      tablet: { position: [0.56, -1.35, 0.13], rotation: [0, -0.07, 0], scale: 0.62 },
+      mobile: { position: [0.0, -1.35, 0.68], rotation: [0, -0.04, 0], scale: 0.51 },
     },
     accent: "#b6792b",
-    background: "#dfd8cd",
-    fog: [25, 70],
+    background: "#e4ddd3",
+    fog: [27, 76],
     keyLight: [5.2, 9.8, 5.8],
-    keyIntensity: 1.92,
-    rimIntensity: 2.22,
+    keyIntensity: 2.08,
+    rimIntensity: 2.34,
   },
   {
     id: "generation",
@@ -129,21 +129,21 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
     asset: asset("power-generation"),
     fallback: fallback("power-generation"),
     camera: {
-      desktop: { position: [5.1, 5.9, 15.3], target: [-2.45, 0.90, -0.25], fov: 41 },
-      tablet: { position: [3.5, 5.5, 15.7], target: [-0.65, 0.9, -0.05], fov: 44 },
-      mobile: { position: [1.5, 4.8, 16.4], target: [0.0, 0.9, 0.4], fov: 50 },
+      desktop: { position: [4.8, 5.7, 14.8], target: [-2.45, 0.90, -0.25], fov: 40 },
+      tablet: { position: [3.3, 5.4, 15.3], target: [-0.65, 0.9, -0.05], fov: 43 },
+      mobile: { position: [1.5, 4.7, 16.0], target: [0.0, 0.9, 0.4], fov: 49 },
     },
     model: {
-      desktop: { position: [-3.90, -1.35, 0.05], rotation: [0, 0.13, 0], scale: 0.55 },
-      tablet: { position: [-0.55, -1.35, 0.12], rotation: [0, 0.11, 0], scale: 0.53 },
-      mobile: { position: [0, -1.35, 0.65], rotation: [0, 0.06, 0], scale: 0.46 },
+      desktop: { position: [-3.72, -1.35, 0.05], rotation: [0, 0.13, 0], scale: 0.69 },
+      tablet: { position: [-0.52, -1.35, 0.12], rotation: [0, 0.11, 0], scale: 0.61 },
+      mobile: { position: [0, -1.35, 0.65], rotation: [0, 0.06, 0], scale: 0.50 },
     },
     accent: "#355f8e",
-    background: "#dbddd9",
-    fog: [27, 76],
+    background: "#e0e2de",
+    fog: [29, 82],
     keyLight: [-6.2, 10.2, 5.2],
-    keyIntensity: 1.84,
-    rimIntensity: 2.32,
+    keyIntensity: 2.00,
+    rimIntensity: 2.42,
   },
   {
     id: "data-centers",
@@ -153,21 +153,21 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
     asset: asset("data-centers"),
     fallback: fallback("data-centers"),
     camera: {
-      desktop: { position: [6.7, 5.5, 15.1], target: [2.35, 1.02, -0.35], fov: 40 },
-      tablet: { position: [4.0, 5.3, 15.5], target: [0.55, 1.0, -0.10], fov: 44 },
-      mobile: { position: [1.2, 4.6, 16.1], target: [0.05, 0.98, 0.42], fov: 50 },
+      desktop: { position: [6.4, 5.3, 14.6], target: [2.35, 1.02, -0.35], fov: 39 },
+      tablet: { position: [3.8, 5.1, 15.1], target: [0.55, 1.0, -0.10], fov: 43 },
+      mobile: { position: [1.2, 4.5, 15.7], target: [0.05, 0.98, 0.42], fov: 49 },
     },
     model: {
-      desktop: { position: [3.85, -1.34, -0.02], rotation: [0, -0.06, 0], scale: 0.54 },
-      tablet: { position: [0.55, -1.35, 0.10], rotation: [0, -0.04, 0], scale: 0.52 },
-      mobile: { position: [0, -1.35, 0.68], rotation: [0, -0.02, 0], scale: 0.45 },
+      desktop: { position: [3.70, -1.34, -0.02], rotation: [0, -0.06, 0], scale: 0.68 },
+      tablet: { position: [0.51, -1.35, 0.10], rotation: [0, -0.04, 0], scale: 0.60 },
+      mobile: { position: [0, -1.35, 0.68], rotation: [0, -0.02, 0], scale: 0.49 },
     },
     accent: "#376b91",
-    background: "#d9dcda",
-    fog: [24, 68],
+    background: "#dfe2df",
+    fog: [26, 74],
     keyLight: [5.0, 8.8, 4.2],
-    keyIntensity: 1.80,
-    rimIntensity: 2.38,
+    keyIntensity: 2.02,
+    rimIntensity: 2.46,
   },
   {
     id: "recycling",
@@ -177,21 +177,21 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
     asset: asset("recycling"),
     fallback: fallback("recycling"),
     camera: {
-      desktop: { position: [3.4, 5.2, 14.8], target: [-2.25, 0.95, -0.18], fov: 41 },
-      tablet: { position: [1.6, 5.0, 15.2], target: [-0.55, 0.94, -0.06], fov: 44 },
-      mobile: { position: [0.2, 4.5, 16.0], target: [0, 0.94, 0.44], fov: 50 },
+      desktop: { position: [3.1, 5.0, 14.3], target: [-2.25, 0.95, -0.18], fov: 40 },
+      tablet: { position: [1.4, 4.9, 14.8], target: [-0.55, 0.94, -0.06], fov: 43 },
+      mobile: { position: [0.2, 4.4, 15.6], target: [0, 0.94, 0.44], fov: 49 },
     },
     model: {
-      desktop: { position: [-3.85, -1.35, 0.02], rotation: [0, 0.10, 0], scale: 0.55 },
-      tablet: { position: [-0.55, -1.35, 0.12], rotation: [0, 0.08, 0], scale: 0.53 },
-      mobile: { position: [0, -1.35, 0.70], rotation: [0, 0.04, 0], scale: 0.46 },
+      desktop: { position: [-3.68, -1.35, 0.02], rotation: [0, 0.10, 0], scale: 0.69 },
+      tablet: { position: [-0.52, -1.35, 0.12], rotation: [0, 0.08, 0], scale: 0.61 },
+      mobile: { position: [0, -1.35, 0.70], rotation: [0, 0.04, 0], scale: 0.50 },
     },
     accent: "#b6792b",
-    background: "#dfd7ca",
-    fog: [25, 70],
+    background: "#e4dcd0",
+    fog: [27, 76],
     keyLight: [-4.8, 9.5, 5.0],
-    keyIntensity: 1.86,
-    rimIntensity: 2.28,
+    keyIntensity: 2.04,
+    rimIntensity: 2.38,
   },
   {
     id: "close",
@@ -201,21 +201,21 @@ export const sceneDefinitions: readonly SceneDefinition[] = [
     asset: asset("closing-platform"),
     fallback: fallback("closing-platform"),
     camera: {
-      desktop: { position: [1.5, 6.4, 16.8], target: [2.0, 0.92, -0.24], fov: 40 },
-      tablet: { position: [0.6, 5.9, 17.0], target: [0.45, 0.90, -0.10], fov: 44 },
-      mobile: { position: [-0.2, 5.2, 17.7], target: [0.0, 0.90, 0.35], fov: 49 },
+      desktop: { position: [1.3, 6.1, 16.1], target: [2.0, 0.92, -0.24], fov: 39 },
+      tablet: { position: [0.5, 5.7, 16.5], target: [0.45, 0.90, -0.10], fov: 43 },
+      mobile: { position: [-0.2, 5.1, 17.1], target: [0.0, 0.90, 0.35], fov: 48 },
     },
     model: {
-      desktop: { position: [3.45, -1.35, 0.10], rotation: [0, -0.05, 0], scale: 0.52 },
-      tablet: { position: [0.45, -1.35, 0.14], rotation: [0, -0.04, 0], scale: 0.50 },
-      mobile: { position: [0, -1.35, 0.70], rotation: [0, -0.02, 0], scale: 0.44 },
+      desktop: { position: [3.28, -1.35, 0.10], rotation: [0, -0.05, 0], scale: 0.66 },
+      tablet: { position: [0.42, -1.35, 0.14], rotation: [0, -0.04, 0], scale: 0.59 },
+      mobile: { position: [0, -1.35, 0.70], rotation: [0, -0.02, 0], scale: 0.49 },
     },
     accent: "#355f8e",
-    background: "#ddd7cd",
-    fog: [28, 78],
+    background: "#e2dcd2",
+    fog: [30, 84],
     keyLight: [6.4, 10.8, 2.7],
-    keyIntensity: 1.88,
-    rimIntensity: 2.35,
+    keyIntensity: 2.04,
+    rimIntensity: 2.46,
   },
 ] as const;
 
@@ -260,12 +260,12 @@ export function modelTransform(definition: SceneDefinition, width: number): Mode
   return definition.model[viewportClass(width)];
 }
 
-export function sceneAssetForQuality(definition: SceneDefinition, quality: "high" | "medium") {
+export function sceneAssetForQuality(definition: SceneDefinition, _quality: "high" | "medium") {
   if (assetSet === "r6") {
     const hero = r6LegacyNameToHero[definition.assetName as LegacyAssetName];
-    return `/models/r6/hero/${hero}/${quality === "high" ? "lod0" : "lod1"}.glb`;
+    return `/models/r6/hero/${hero}/lod0.glb`;
   }
-  if (assetSet === "r5") return `/models/r5/${quality}/${definition.assetName}.glb`;
+  if (assetSet === "r5") return `/models/r5/high/${definition.assetName}.glb`;
   return definition.asset;
 }
 
