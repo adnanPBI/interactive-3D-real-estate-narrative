@@ -55,11 +55,11 @@ function ProcessCarrierLoop({ hero, bounds, accent }: { hero: R6HeroId; bounds: 
         ? <boxGeometry args={[0.62, 0.065, 0.43]} />
         : <boxGeometry args={[0.34, 0.22, 0.30]} />}
       <meshPhysicalMaterial
-        color={hero === "manufacturing-line" ? "#1b3f57" : accent}
-        metalness={hero === "manufacturing-line" ? 0.48 : 0.20}
-        roughness={hero === "manufacturing-line" ? 0.18 : 0.48}
-        clearcoat={0.24}
-        clearcoatRoughness={0.22}
+        color={hero === "manufacturing-line" ? "#244e67" : accent}
+        metalness={hero === "manufacturing-line" ? 0.42 : 0.18}
+        roughness={hero === "manufacturing-line" ? 0.20 : 0.44}
+        clearcoat={0.28}
+        clearcoatRoughness={0.20}
       />
     </instancedMesh>
   );
@@ -84,21 +84,21 @@ function ManufacturingGantry({ bounds }: { bounds: HeroLocalBounds }) {
     <group name="manufacturing-live-gantry" position={[0, y, z]}>
       <mesh position={[bounds.center[0], 0.44, 0]} castShadow>
         <boxGeometry args={[span + 0.75, 0.09, 0.10]} />
-        <meshStandardMaterial color="#505957" metalness={0.72} roughness={0.30} />
+        <meshStandardMaterial color="#697270" metalness={0.68} roughness={0.28} />
       </mesh>
       <group ref={carriage} position={[x0, 0.38, 0]}>
         <mesh castShadow>
           <boxGeometry args={[0.42, 0.24, 0.28]} />
-          <meshStandardMaterial color="#d7d8d1" metalness={0.24} roughness={0.34} />
+          <meshStandardMaterial color="#e3e4de" metalness={0.20} roughness={0.30} />
         </mesh>
         <group ref={gripper} position={[0, -0.20, 0]}>
           <mesh castShadow>
             <boxGeometry args={[0.065, 0.42, 0.065]} />
-            <meshStandardMaterial color="#6a7471" metalness={0.68} roughness={0.28} />
+            <meshStandardMaterial color="#7b8581" metalness={0.62} roughness={0.26} />
           </mesh>
           <mesh castShadow position={[0, -0.24, 0]}>
             <boxGeometry args={[0.34, 0.06, 0.26]} />
-            <meshStandardMaterial color="#bd9045" metalness={0.46} roughness={0.32} />
+            <meshStandardMaterial color="#caa258" metalness={0.40} roughness={0.28} />
           </mesh>
         </group>
       </group>
@@ -115,14 +115,14 @@ function CoolingFan({ position, scale, speed }: { position: [number, number, num
   return (
     <group position={position} scale={scale} name="cooling-fan-runtime">
       <mesh castShadow receiveShadow>
-        <cylinderGeometry args={[0.46, 0.46, 0.12, 28]} />
-        <meshStandardMaterial color="#4b5553" metalness={0.62} roughness={0.34} />
+        <cylinderGeometry args={[0.46, 0.46, 0.12, 32]} />
+        <meshStandardMaterial color="#616c69" metalness={0.58} roughness={0.30} />
       </mesh>
       <group ref={rotor} position={[0, 0.07, 0]}>
         {[0, 1, 2, 3].map((i) => (
           <mesh key={i} castShadow rotation={[0, i * Math.PI / 2, 0]} position={[0, 0.03, 0.20]}>
             <boxGeometry args={[0.10, 0.035, 0.36]} />
-            <meshStandardMaterial color="#c5cbc7" metalness={0.46} roughness={0.32} />
+            <meshStandardMaterial color="#d8ddd8" metalness={0.42} roughness={0.28} />
           </mesh>
         ))}
       </group>
@@ -149,20 +149,31 @@ function Turbine({ position, scale, speed }: { position: [number, number, number
   useFrame((state, delta) => {
     if (!rotor.current || reducedMotion()) return;
     rotor.current.rotation.z += Math.min(delta, 0.06) * speed;
-    if (state.gl.shadowMap.enabled && state.clock.elapsedTime % 0.12 < Math.min(delta, 0.06)) state.gl.shadowMap.needsUpdate = true;
+    if (state.gl.shadowMap.enabled && state.clock.elapsedTime % 0.12 < Math.min(delta, 0.06)) {
+      state.gl.shadowMap.needsUpdate = true;
+    }
   });
-  const hubY = 4.55 * scale;
-  const bladeLength = 1.60 * scale;
+
+  const hubY = 6.05 * scale;
+  const bladeLength = 2.55 * scale;
   return (
-    <group position={position} name="rotating-turbine-runtime">
+    <group position={position} name="rotating-turbine-runtime" userData={{ replacesAuthoredStaticTurbine: true }}>
       <mesh castShadow position={[0, hubY * 0.5, 0]}>
-        <cylinderGeometry args={[0.08 * scale, 0.18 * scale, hubY, 28]} />
-        <meshStandardMaterial color="#d5d7d0" metalness={0.42} roughness={0.34} />
+        <cylinderGeometry args={[0.065 * scale, 0.16 * scale, hubY, 36]} />
+        <meshPhysicalMaterial color="#ecece6" metalness={0.22} roughness={0.30} clearcoat={0.16} />
       </mesh>
-      <group position={[0, hubY, 0.05 * scale]}>
+      <mesh castShadow position={[0, 0.05 * scale, 0]}>
+        <cylinderGeometry args={[0.24 * scale, 0.28 * scale, 0.10 * scale, 28]} />
+        <meshStandardMaterial color="#c9c7bf" roughness={0.72} metalness={0.04} />
+      </mesh>
+      <group position={[0, hubY, 0.04 * scale]}>
         <mesh castShadow>
-          <sphereGeometry args={[0.20 * scale, 20, 14]} />
-          <meshStandardMaterial color="#e7e7df" metalness={0.30} roughness={0.28} />
+          <sphereGeometry args={[0.19 * scale, 24, 18]} />
+          <meshPhysicalMaterial color="#f3f3ec" metalness={0.18} roughness={0.24} clearcoat={0.24} />
+        </mesh>
+        <mesh castShadow position={[-0.16 * scale, 0.10 * scale, -0.05 * scale]}>
+          <boxGeometry args={[0.72 * scale, 0.24 * scale, 0.28 * scale]} />
+          <meshPhysicalMaterial color="#ededE7" metalness={0.18} roughness={0.28} clearcoat={0.18} />
         </mesh>
         <group ref={rotor}>
           {[0, 1, 2].map((i) => {
@@ -170,8 +181,8 @@ function Turbine({ position, scale, speed }: { position: [number, number, number
             return (
               <group key={i} rotation={[0, 0, a]}>
                 <mesh castShadow position={[0, bladeLength * 0.52, 0]}>
-                  <boxGeometry args={[0.18 * scale, bladeLength, 0.07 * scale]} />
-                  <meshStandardMaterial color="#f0efe7" metalness={0.14} roughness={0.31} />
+                  <boxGeometry args={[0.19 * scale, bladeLength, 0.055 * scale]} />
+                  <meshPhysicalMaterial color="#f6f5ef" metalness={0.08} roughness={0.28} clearcoat={0.18} />
                 </mesh>
               </group>
             );
@@ -182,22 +193,34 @@ function Turbine({ position, scale, speed }: { position: [number, number, number
   );
 }
 
-function InPlantTurbines({ hero, bounds }: { hero: R6HeroId; bounds: HeroLocalBounds }) {
-  if (!(hero === "integrated-campus" || hero === "substation-bess" || hero === "connected-campus")) return null;
-  const scale = Math.max(0.48, Math.min(0.68, bounds.size[1] / 5.2));
-  const bladeMargin = 1.95 * scale;
-  const right = bounds.max[0] - bladeMargin;
-  const back = bounds.min[2] + bladeMargin;
-  const count = hero === "substation-bess" ? 2 : hero === "integrated-campus" ? 2 : 1;
+type TurbinePlacement = { position: [number, number, number]; scale: number; speed: number };
+
+const TURBINE_LAYOUTS: Partial<Record<R6HeroId, readonly TurbinePlacement[]>> = {
+  // These are the original R4 authored turbine coordinates. The static R4/R5
+  // versions are removed at build time; the animated assemblies occupy the same
+  // plant zones instead of sitting outside the compound boundary.
+  "integrated-campus": [
+    { position: [7.0, 0, -0.7], scale: 0.82, speed: 0.82 },
+    { position: [8.0, 0, -4.1], scale: 0.62, speed: 0.94 },
+  ],
+  "substation-bess": [
+    { position: [7.2, 0, -3.7], scale: 0.96, speed: 0.76 },
+    { position: [4.9, 0, -5.0], scale: 0.70, speed: 0.88 },
+    { position: [9.2, 0, -5.4], scale: 0.60, speed: 0.98 },
+  ],
+  "connected-campus": [
+    { position: [8.6, 0, -2.4], scale: 0.78, speed: 0.82 },
+    { position: [9.1, 0, -5.0], scale: 0.58, speed: 0.96 },
+  ],
+};
+
+function InPlantTurbines({ hero }: { hero: R6HeroId }) {
+  const placements = TURBINE_LAYOUTS[hero];
+  if (!placements?.length) return null;
   return (
-    <group name="in-plant-rotating-turbines" userData={{ insideHeroBounds: true }}>
-      {Array.from({ length: count }, (_, i) => (
-        <Turbine
-          key={i}
-          position={[right - i * 2.9 * scale, bounds.min[1], back + i * 1.25 * scale]}
-          scale={scale}
-          speed={0.92 + i * 0.13}
-        />
+    <group name="replacement-rotating-turbines" userData={{ originalTurbineZones: true, roadFree: true }}>
+      {placements.map((placement, i) => (
+        <Turbine key={`${hero}-${i}`} {...placement} />
       ))}
     </group>
   );
@@ -225,7 +248,7 @@ function RoofSteam({ bounds, hero }: { bounds: HeroLocalBounds; hero: R6HeroId }
   if (!enabled) return null;
   return (
     <points ref={points} geometry={geometry} position={[bounds.center[0] + bounds.size[0] * 0.10, bounds.max[1] + 0.12, bounds.center[2] - bounds.size[2] * 0.10]} frustumCulled={false}>
-      <pointsMaterial color="#aeb6b2" size={0.16} transparent opacity={0.15} depthWrite={false} />
+      <pointsMaterial color="#d6ddd8" size={0.16} transparent opacity={0.12} depthWrite={false} />
     </points>
   );
 }
@@ -233,11 +256,11 @@ function RoofSteam({ bounds, hero }: { bounds: HeroLocalBounds; hero: R6HeroId }
 export function R6HeroAmbientMotion({ hero, accent, quality: _quality, bounds }: { hero: R6HeroId; accent: string; quality: "high" | "medium"; bounds: HeroLocalBounds | null }) {
   if (!bounds) return null;
   return (
-    <group name="r614-process-motion" userData={{ runtimeOnly: true, boundsAware: true, noRoadTraffic: true }}>
+    <group name="r615-process-motion" userData={{ runtimeOnly: true, boundsAware: true, noRoadTraffic: true }}>
       <ProcessCarrierLoop hero={hero} bounds={bounds} accent={accent} />
       {hero === "manufacturing-line" ? <ManufacturingGantry bounds={bounds} /> : null}
       {hero === "data-center-cooling" ? <DataCenterOperations bounds={bounds} /> : null}
-      <InPlantTurbines hero={hero} bounds={bounds} />
+      <InPlantTurbines hero={hero} />
       <RoofSteam bounds={bounds} hero={hero} />
     </group>
   );
