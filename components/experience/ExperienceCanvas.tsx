@@ -41,15 +41,17 @@ export function ExperienceCanvas({
         gl.setPixelRatio(Math.min(limits.maxDpr, Math.max(limits.minDpr, Math.min(deviceDpr, limits.initialDpr))));
         gl.outputColorSpace = THREE.SRGBColorSpace;
         gl.toneMapping = THREE.ACESFilmicToneMapping;
-        gl.toneMappingExposure = quality === "high" ? 0.90 : 0.94;
+        // R6.1.5 client review: restore readable midtones without flattening the
+        // white façade highlights. ACES still protects the brightest surfaces.
+        gl.toneMappingExposure = quality === "high" ? 1.07 : 1.10;
         gl.shadowMap.enabled = true;
         gl.shadowMap.type = THREE.PCFShadowMap;
         gl.shadowMap.autoUpdate = false;
         gl.shadowMap.needsUpdate = true;
       }}
     >
-      <color attach="background" args={["#d8d5cf"]} />
-      <fog attach="fog" args={["#d8d5cf", 22, 68]} />
+      <color attach="background" args={["#ddd9d1"]} />
+      <fog attach="fog" args={["#ddd9d1", 24, 74]} />
       <PerformanceGovernor quality={quality} />
       <StoryWorld quality={quality} onFirstSceneReady={onFirstSceneReady} />
       <R6PostFX quality={quality} />
