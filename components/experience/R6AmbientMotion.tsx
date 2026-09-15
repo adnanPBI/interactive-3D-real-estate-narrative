@@ -18,6 +18,13 @@ function reducedMotion() {
 
 const tmp = new THREE.Object3D();
 
+// Structural data-center equipment belongs to the authored GLB. Runtime motion
+// may add atmosphere, but it must not infer machinery placement from aggregate
+// scene bounds: those bounds include context and can put equipment above the roof.
+// This anchor is model-local and follows the authored rooftop service deck in
+// assets-source/r6/authoring/hero_datacenter.py.
+const DATA_CENTER_STEAM_ORIGIN: readonly [number, number, number] = [1.0, 3.34, -0.85];
+
 function ProcessCarrierLoop({ hero, bounds, accent }: { hero: R6HeroId; bounds: HeroLocalBounds; accent: string }) {
   const mesh = useRef<THREE.InstancedMesh>(null);
   const phase = useRef(0);
@@ -102,44 +109,6 @@ function ManufacturingGantry({ bounds }: { bounds: HeroLocalBounds }) {
           </mesh>
         </group>
       </group>
-    </group>
-  );
-}
-
-function CoolingFan({ position, scale, speed }: { position: [number, number, number]; scale: number; speed: number }) {
-  const rotor = useRef<THREE.Group>(null);
-  useFrame((_, delta) => {
-    if (!rotor.current || reducedMotion()) return;
-    rotor.current.rotation.y += Math.min(delta, 0.06) * speed;
-  });
-  return (
-    <group position={position} scale={scale} name="cooling-fan-runtime">
-      <mesh castShadow receiveShadow>
-        <cylinderGeometry args={[0.46, 0.46, 0.12, 32]} />
-        <meshStandardMaterial color="#616c69" metalness={0.58} roughness={0.30} />
-      </mesh>
-      <group ref={rotor} position={[0, 0.07, 0]}>
-        {[0, 1, 2, 3].map((i) => (
-          <mesh key={i} castShadow rotation={[0, i * Math.PI / 2, 0]} position={[0, 0.03, 0.20]}>
-            <boxGeometry args={[0.10, 0.035, 0.36]} />
-            <meshStandardMaterial color="#d8ddd8" metalness={0.42} roughness={0.28} />
-          </mesh>
-        ))}
-      </group>
-    </group>
-  );
-}
-
-function DataCenterOperations({ bounds }: { bounds: HeroLocalBounds }) {
-  const y = bounds.max[1] + 0.08;
-  const z = bounds.center[2] - bounds.size[2] * 0.10;
-  const start = bounds.center[0] - bounds.size[0] * 0.24;
-  const scale = Math.max(0.54, Math.min(0.80, bounds.size[0] / 16));
-  return (
-    <group name="data-center-live-cooling">
-      {[0, 1, 2, 3].map((i) => (
-        <CoolingFan key={i} position={[start + i * 1.05 * scale, y, z]} scale={scale} speed={1.45 + i * 0.12} />
-      ))}
     </group>
   );
 }
@@ -229,6 +198,13 @@ function InPlantTurbines({ hero }: { hero: R6HeroId }) {
 function RoofSteam({ bounds, hero }: { bounds: HeroLocalBounds; hero: R6HeroId }) {
   const points = useRef<THREE.Points>(null);
   const enabled = hero === "data-center-cooling" || hero === "manufacturing-line";
+  const basePosition: [number, number, number] = hero === "data-center-cooling"
+    ? [...DATA_CENTER_STEAM_ORIGIN]
+    : [
+        bounds.center[0] + bounds.size[0] * 0.10,
+        bounds.max[1] + 0.12,
+        bounds.center[2] - bounds.size[2] * 0.10,
+      ];
   const geometry = useMemo(() => {
     const count = 18;
     const arr = new Float32Array(count * 3);
@@ -243,11 +219,11 @@ function RoofSteam({ bounds, hero }: { bounds: HeroLocalBounds; hero: R6HeroId }
   }, []);
   useFrame((state) => {
     if (!enabled || !points.current || reducedMotion()) return;
-    points.current.position.y = bounds.max[1] + 0.12 + ((state.clock.elapsedTime * 0.025) % 0.16);
+    points.current.position.y = basePosition[1] + ((state.clock.elapsedTime * 0.025) % 0.16);
   });
   if (!enabled) return null;
   return (
-    <points ref={points} geometry={geometry} position={[bounds.center[0] + bounds.size[0] * 0.10, bounds.max[1] + 0.12, bounds.center[2] - bounds.size[2] * 0.10]} frustumCulled={false}>
+    <points ref={points} geometry={geometry} position={basePosition} frustumCulled={false}>
       <pointsMaterial color="#d6ddd8" size={0.16} transparent opacity={0.12} depthWrite={false} />
     </points>
   );
@@ -259,7 +235,6 @@ export function R6HeroAmbientMotion({ hero, accent, quality: _quality, bounds }:
     <group name="r615-process-motion" userData={{ runtimeOnly: true, boundsAware: true, noRoadTraffic: true }}>
       <ProcessCarrierLoop hero={hero} bounds={bounds} accent={accent} />
       {hero === "manufacturing-line" ? <ManufacturingGantry bounds={bounds} /> : null}
-      {hero === "data-center-cooling" ? <DataCenterOperations bounds={bounds} /> : null}
       <InPlantTurbines hero={hero} />
       <RoofSteam bounds={bounds} hero={hero} />
     </group>
