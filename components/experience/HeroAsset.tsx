@@ -28,50 +28,82 @@ function isPremiumMaterial(name: string): name is R61ManufacturingMaterialName {
   return Object.prototype.hasOwnProperty.call(r61MaterialNormalScale, name);
 }
 
+function isGlowMaterial(name: string) {
+  return name === "WarmGlow" || name === "CoolGlow" || name === "ServerFace";
+}
+
 function applyCinematicPbrTuning(material: THREE.MeshStandardMaterial, glass: boolean) {
   const name = material.name;
   if (glass) {
-    // Stable architectural glazing: tinted/reflective rather than transparent.
-    // This removes camera-dependent transparent sorting shimmer/blinking.
-    material.color.set("#33474f");
-    material.roughness = 0.18;
-    material.metalness = 0.34;
+    // R6.1.5: real architectural glazing. Keep the pane behind the metal frame,
+    // do not write depth, and use restrained reflectivity so interior detail is
+    // visible without transparent-sort shimmer.
+    material.color.set(name === "Glass_Tinted" ? "#6f8b91" : "#a8c0c2");
+    material.roughness = name === "Glass_Tinted" ? 0.15 : 0.10;
+    material.metalness = 0.08;
     material.envMapIntensity = 1.18;
+    material.transparent = true;
+    material.opacity = name === "Glass_Tinted" ? 0.46 : 0.34;
+    material.depthWrite = false;
+    material.depthTest = true;
+    material.side = THREE.DoubleSide;
+    material.alphaHash = false;
+    material.polygonOffset = true;
+    material.polygonOffsetFactor = -1;
+    material.polygonOffsetUnits = -1;
     return;
   }
 
+  material.transparent = false;
+  material.opacity = 1;
+  material.depthWrite = true;
+  material.depthTest = true;
+  material.side = THREE.FrontSide;
+  material.alphaHash = false;
+
+  // Previous production multiplied most colors down into the 0.58-0.84 range,
+  // which crushed the annotated assets into near-black silhouettes. Preserve
+  // material contrast while allowing the authored palette and PBR textures to
+  // remain readable against the warm editorial background.
   if (name.includes("Concrete")) {
-    material.color.multiplyScalar(0.72);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.70, 0.91);
+    material.color.multiplyScalar(0.96);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.64, 0.86);
     material.metalness = Math.min(material.metalness, 0.04);
-    material.envMapIntensity = 0.50;
+    material.envMapIntensity = 0.72;
   } else if (name.startsWith("Metal_") || name === "Steel" || name === "Aluminum") {
-    material.color.multiplyScalar(0.76);
-    material.metalness = Math.max(material.metalness, 0.68);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.24, 0.46);
-    material.envMapIntensity = 1.08;
+    material.color.multiplyScalar(0.98);
+    material.metalness = Math.max(material.metalness, 0.66);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.22, 0.43);
+    material.envMapIntensity = 1.16;
   } else if (name === "Graphite" || name === "Roof" || name === "Metal_Painted_Charcoal") {
-    material.color.multiplyScalar(0.58);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.40, 0.68);
-    material.metalness = Math.max(material.metalness, 0.20);
-    material.envMapIntensity = 0.82;
-  } else if (name === "Facade" || name === "Panel_White" || name === "White") {
-    material.color.multiplyScalar(0.79);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.40, 0.66);
-    material.metalness = Math.max(material.metalness, 0.08);
-    material.envMapIntensity = 0.84;
-  } else if (name === "Recycled") {
-    material.color.multiplyScalar(0.69);
-    material.roughness = Math.max(material.roughness, 0.78);
-    material.envMapIntensity = 0.60;
-  } else if (name.includes("Copper") || name.includes("Bronze") || name.includes("Accent")) {
-    material.color.offsetHSL(0, 0.06, -0.04);
-    material.metalness = Math.max(material.metalness, 0.58);
-    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.26, 0.50);
-    material.envMapIntensity = 1.04;
-  } else {
     material.color.multiplyScalar(0.84);
-    material.envMapIntensity = 0.78;
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.36, 0.62);
+    material.metalness = Math.max(material.metalness, 0.16);
+    material.envMapIntensity = 0.96;
+  } else if (name === "Facade" || name === "Panel_White" || name === "White") {
+    material.color.multiplyScalar(0.98);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.34, 0.60);
+    material.metalness = Math.max(material.metalness, 0.06);
+    material.envMapIntensity = 0.98;
+  } else if (name === "Recycled") {
+    material.color.multiplyScalar(0.90);
+    material.roughness = Math.max(material.roughness, 0.70);
+    material.envMapIntensity = 0.76;
+  } else if (name.includes("Copper") || name.includes("Bronze") || name.includes("Accent")) {
+    material.color.offsetHSL(0, 0.045, 0.035);
+    material.metalness = Math.max(material.metalness, 0.54);
+    material.roughness = THREE.MathUtils.clamp(material.roughness, 0.24, 0.46);
+    material.envMapIntensity = 1.12;
+  } else {
+    material.color.multiplyScalar(0.96);
+    material.envMapIntensity = 0.90;
+  }
+
+  if (isGlowMaterial(name)) {
+    material.polygonOffset = true;
+    material.polygonOffsetFactor = -2;
+    material.polygonOffsetUnits = -2;
+    material.emissiveIntensity = Math.min(material.emissiveIntensity || 1, 0.72);
   }
 }
 
@@ -83,32 +115,23 @@ function configureMaterial(
 ) {
   const glass = r61GlassMaterials.has(material.name);
 
-  // All structural materials, including glazing, stay in the stable opaque depth
-  // pass. The R6 assets contain layered façade strips where transparent sorting
-  // caused repeated component shimmer during slow camera movement.
-  material.transparent = false;
-  material.opacity = 1;
-  material.depthWrite = true;
-  material.depthTest = true;
-  material.alphaHash = false;
-
   const premium = isPremiumMaterial(material.name) ? premiumTextures?.[material.name] : undefined;
   if (premium) {
     if (!material.map) material.map = premium.basecolor;
     if (!material.normalMap) {
       material.normalMap = premium.normal;
       const normalScale = r61MaterialNormalScale[material.name] ?? 0.12;
-      material.normalScale.set(normalScale * 1.12, normalScale * 1.12);
+      material.normalScale.set(normalScale, normalScale);
     }
     if (!material.roughnessMap) material.roughnessMap = premium.orm;
     if (!material.metalnessMap) material.metalnessMap = premium.orm;
     if (!material.aoMap) material.aoMap = premium.orm;
-    material.aoMapIntensity = 1.28;
+    material.aoMapIntensity = 1.04;
   } else if (legacyTextures && shouldUseLegacyTexture(material.name)) {
     if (!material.map) material.map = legacyTextures.basecolor;
     if (!material.normalMap) {
       material.normalMap = legacyTextures.normal;
-      material.normalScale.set(0.18, 0.18);
+      material.normalScale.set(0.15, 0.15);
     }
     if (!material.roughnessMap) material.roughnessMap = legacyTextures.orm;
     if (!material.metalnessMap) material.metalnessMap = legacyTextures.orm;
@@ -199,7 +222,10 @@ export function HeroAsset({
       mesh.material = Array.isArray(mesh.material) ? materials : materials[0];
       mesh.castShadow = quality === "high";
       mesh.receiveShadow = true;
-      mesh.renderOrder = 0;
+      const meshMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      mesh.renderOrder = meshMaterials.some((material) => r61GlassMaterials.has(material.name))
+        ? 3
+        : meshMaterials.some((material) => isGlowMaterial(material.name)) ? 2 : 0;
     });
     return { instance: clone, bindings: nextBindings, bounds: localBounds(clone) };
   }, [anisotropy, gltf, legacyTextures, premiumTextures, quality]);
@@ -213,7 +239,8 @@ export function HeroAsset({
     const texturesReady = hero === "manufacturing-line" ? Boolean(premiumTextures) : Boolean(legacyTextures);
     if (!texturesReady) return;
     renderer.shadowMap.needsUpdate = true;
-    let raf1 = 0; let raf2 = 0;
+    let raf1 = 0;
+    let raf2 = 0;
     raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(() => onReady?.()); });
     return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
   }, [hero, instance, legacyTextures, onReady, premiumTextures, renderer]);
