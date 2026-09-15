@@ -12,9 +12,14 @@ if [[ "$asset_set" != "r6" ]]; then
   exit 0
 fi
 
-echo "R6 Render asset bootstrap: preparing authoritative R6.1.2 runtime assets."
+echo "R6 Render asset bootstrap: preparing R6.1.5 annotated-fidelity runtime assets."
 python3 --version
 python3 -m pip install --disable-pip-version-check trimesh==4.11.1 numpy==2.3.5 scipy==1.16.2 Pillow==12.3.0
+
+# Rebuild the inherited R5 high/medium context without roads, vehicles or baked
+# turbines. This prevents legacy context geometry from leaking back into the R6
+# heroes even though the R6 authoring modules themselves no longer add it.
+python3 scripts/generate-r615-clean-context.py
 
 payload="/tmp/author-r61.py.gz.b64"
 awk '/^H4sI/{capture=1} capture && /^B64$/{exit} capture{print}' .github/workflows/materialize-r612-source.yml > "$payload"
