@@ -30,10 +30,10 @@ class SceneTelemetryPass extends RenderPass {
 const architecturalGrade = {
   uniforms: {
     tDiffuse: { value: null },
-    contrast: { value: 0.18 },
-    saturation: { value: 1.035 },
-    gamma: { value: 0.98 },
-    vignette: { value: 0.08 },
+    contrast: { value: 0.10 },
+    saturation: { value: 1.03 },
+    gamma: { value: 0.96 },
+    vignette: { value: 0.03 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -59,7 +59,7 @@ const architecturalGrade = {
       float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
       color = mix(vec3(luma), color, saturation);
       vec2 p = vUv - 0.5;
-      float edge = smoothstep(0.22, 0.72, dot(p, p) * 1.50);
+      float edge = smoothstep(0.24, 0.74, dot(p, p) * 1.42);
       color *= 1.0 - edge * vignette;
       gl_FragColor = vec4(clamp(color, 0.0, 1.0), texel.a);
     }
@@ -67,10 +67,9 @@ const architecturalGrade = {
 };
 
 /**
- * R6.1.3 industrial output pipeline.
- * High quality adds restrained SSAO to reveal contact, rails, ducts and machinery
- * depth. Bloom remains intentionally absent because it washed pale architecture
- * into the editorial background in the earlier production pass.
+ * R6.1.5 industrial output pipeline. SSAO is intentionally shallow so it adds
+ * equipment contact and rail definition without turning plant recesses black.
+ * SMAA remains the final geometry edge pass and bloom remains disabled.
  */
 export function R6PostFX({ quality }: { quality: "high" | "medium" }) {
   const gl = useThree((state) => state.gl);
@@ -95,17 +94,17 @@ export function R6PostFX({ quality }: { quality: "high" | "medium" }) {
 
     if (quality === "high") {
       const ssao = new SSAOPass(scene, camera, 1, 1);
-      ssao.kernelRadius = 7;
-      ssao.minDistance = 0.0015;
-      ssao.maxDistance = 0.085;
+      ssao.kernelRadius = 4;
+      ssao.minDistance = 0.0012;
+      ssao.maxDistance = 0.055;
       next.addPass(ssao);
     }
 
     const grade = new ShaderPass(architecturalGrade);
-    grade.uniforms.contrast.value = quality === "high" ? 0.19 : 0.14;
-    grade.uniforms.saturation.value = quality === "high" ? 1.04 : 1.025;
-    grade.uniforms.gamma.value = quality === "high" ? 0.975 : 0.99;
-    grade.uniforms.vignette.value = quality === "high" ? 0.085 : 0.055;
+    grade.uniforms.contrast.value = quality === "high" ? 0.10 : 0.075;
+    grade.uniforms.saturation.value = quality === "high" ? 1.03 : 1.02;
+    grade.uniforms.gamma.value = quality === "high" ? 0.955 : 0.97;
+    grade.uniforms.vignette.value = quality === "high" ? 0.032 : 0.018;
     next.addPass(grade);
 
     next.addPass(new SMAAPass());
