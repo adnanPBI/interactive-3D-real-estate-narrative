@@ -12,13 +12,14 @@ import { CinematicSky } from "./CinematicSky";
 import { EnvironmentProbe } from "./EnvironmentProbe";
 import { HeroAsset } from "./HeroAsset";
 
-type RuntimeLod = "lod0" | "lod1";
+type RuntimeLod = "lod0";
 
-function targetLodFor(hero: (typeof r6ChapterHero)[number], quality: "high" | "medium"): RuntimeLod {
-  // Manufacturing is the closest hero and its lod1 collapses from ~77k to ~12k
-  // triangles. Keep it on the authored master LOD0 even on the medium desktop tier.
-  if (hero === "manufacturing-line") return "lod0";
-  return quality === "high" ? "lod0" : "lod1";
+function targetLodFor(_hero: (typeof r6ChapterHero)[number], _quality: "high" | "medium"): RuntimeLod {
+  // R6.1.5 visual-fidelity mode: every current LOD0 is below the 120k medium
+  // triangle ceiling, so do not collapse non-manufacturing chapters to LOD1.
+  // This keeps façade trims, cooling plant, electrical detail and recycling
+  // equipment visible on the Windows/Intel medium tier seen in client review.
+  return "lod0";
 }
 
 export function StoryWorld({ quality, onFirstSceneReady }: { quality: "high" | "medium"; onFirstSceneReady?: () => void }) {
@@ -52,7 +53,7 @@ export function StoryWorld({ quality, onFirstSceneReady }: { quality: "high" | "
     <AssetPreloader quality={quality} />
     <mesh position={[0, -1.52, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
       <planeGeometry args={[140, 140]} />
-      <meshStandardMaterial color="#d9d4ca" roughness={0.96} metalness={0} />
+      <meshStandardMaterial color="#ddd9d0" roughness={0.94} metalness={0} />
     </mesh>
     <HeroAsset
       key={`${hero}-${rendered.lod}`}
