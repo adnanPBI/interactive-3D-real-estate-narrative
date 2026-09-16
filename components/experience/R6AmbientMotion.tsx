@@ -106,44 +106,6 @@ function ManufacturingGantry({ bounds }: { bounds: HeroLocalBounds }) {
   );
 }
 
-function CoolingFan({ position, scale, speed }: { position: [number, number, number]; scale: number; speed: number }) {
-  const rotor = useRef<THREE.Group>(null);
-  useFrame((_, delta) => {
-    if (!rotor.current || reducedMotion()) return;
-    rotor.current.rotation.y += Math.min(delta, 0.06) * speed;
-  });
-  return (
-    <group position={position} scale={scale} name="cooling-fan-runtime">
-      <mesh castShadow receiveShadow>
-        <cylinderGeometry args={[0.46, 0.46, 0.12, 32]} />
-        <meshStandardMaterial color="#616c69" metalness={0.58} roughness={0.30} />
-      </mesh>
-      <group ref={rotor} position={[0, 0.07, 0]}>
-        {[0, 1, 2, 3].map((i) => (
-          <mesh key={i} castShadow rotation={[0, i * Math.PI / 2, 0]} position={[0, 0.03, 0.20]}>
-            <boxGeometry args={[0.10, 0.035, 0.36]} />
-            <meshStandardMaterial color="#d8ddd8" metalness={0.42} roughness={0.28} />
-          </mesh>
-        ))}
-      </group>
-    </group>
-  );
-}
-
-function DataCenterOperations({ bounds }: { bounds: HeroLocalBounds }) {
-  const y = bounds.max[1] + 0.08;
-  const z = bounds.center[2] - bounds.size[2] * 0.10;
-  const start = bounds.center[0] - bounds.size[0] * 0.24;
-  const scale = Math.max(0.54, Math.min(0.80, bounds.size[0] / 16));
-  return (
-    <group name="data-center-live-cooling">
-      {[0, 1, 2, 3].map((i) => (
-        <CoolingFan key={i} position={[start + i * 1.05 * scale, y, z]} scale={scale} speed={1.45 + i * 0.12} />
-      ))}
-    </group>
-  );
-}
-
 function Turbine({ position, scale, speed }: { position: [number, number, number]; scale: number; speed: number }) {
   const rotor = useRef<THREE.Group>(null);
   useFrame((state, delta) => {
@@ -259,7 +221,7 @@ export function R6HeroAmbientMotion({ hero, accent, quality: _quality, bounds }:
     <group name="r615-process-motion" userData={{ runtimeOnly: true, boundsAware: true, noRoadTraffic: true }}>
       <ProcessCarrierLoop hero={hero} bounds={bounds} accent={accent} />
       {hero === "manufacturing-line" ? <ManufacturingGantry bounds={bounds} /> : null}
-      {hero === "data-center-cooling" ? <DataCenterOperations bounds={bounds} /> : null}
+      {/* Data-center mechanical fans are authored in the GLB. Do not add a bounds.max-based overlay: tall site fixtures make that an unsafe roof datum. */}
       <InPlantTurbines hero={hero} />
       <RoofSteam bounds={bounds} hero={hero} />
     </group>
