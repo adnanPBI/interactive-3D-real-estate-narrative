@@ -7,11 +7,14 @@ const home = fs.readFileSync("components/experience/HomeExperience.tsx", "utf8")
 const fallback = fs.readFileSync("components/experience/StaticSceneFallback.tsx", "utf8");
 const acceptance = fs.readFileSync("scripts/acceptance_qa.py", "utf8");
 
-test("R6 starts in static fallback until the client WebGL probe upgrades quality", () => {
+test("R6 starts safe, upgrades to WebGL, and reduced motion keeps the hero visible", () => {
   assert.match(quality, /useState<Quality>\("fallback"\)/);
   assert.match(quality, /if \(!webgl\) return "fallback"/);
   assert.ok(quality.indexOf('if (!webgl) return "fallback"') < quality.indexOf('if (forced === "high"'), "WebGL safety must precede the quality override");
-  assert.match(home, /quality === "fallback" \|\| runtimeFallback \? \(/);
+  assert.doesNotMatch(quality, /if \(reduced \|\| weakRenderer/);
+  assert.match(quality, /Reduced motion is an animation preference/);
+  assert.match(home, /const renderStaticOnly = quality === "fallback" \|\| runtimeFallback/);
+  assert.match(home, /data-r6-loading-cover="true"/);
   assert.match(home, /<StaticSceneFallback activeChapter=\{activeChapter\}/);
   assert.match(home, /<ExperienceCanvas quality=\{quality\}/);
 });
@@ -27,5 +30,5 @@ test("Playwright acceptance includes a forced WebGL-unavailable runtime proof", 
 
 test("R6.1 preserves authored maps and uses bounded transition-aware rendering", () => {
   const heroAsset = fs.readFileSync("components/experience/HeroAsset.tsx", "utf8"); const canvas = fs.readFileSync("components/experience/ExperienceCanvas.tsx", "utf8"); const camera = fs.readFileSync("components/experience/CinematicCameraRig.tsx", "utf8"); const environment = fs.readFileSync("components/experience/EnvironmentProbe.tsx", "utf8"); const post = fs.readFileSync("components/experience/R6PostFX.tsx", "utf8");
-  assert.match(heroAsset, /if \(!material\.map\)/); assert.match(heroAsset, /if \(!material\.normalMap\)/); assert.match(heroAsset, /if \(!material\.aoMap\)/); assert.match(canvas, /PCFShadowMap/); assert.match(canvas, /shadowMap\.autoUpdate = false/); assert.match(camera, /SHADOW_POSITION_EPSILON = 0\.004/); assert.match(camera, /previousShadowSun = useRef<THREE\.Vector3 \| null>\(null\)/); assert.match(camera, /shadowMap\.needsUpdate = true/); assert.doesNotMatch(camera, /SHADOW_INTENSITY_EPSILON|previousSunIntensity/); assert.match(heroAsset, /\[assetUrl, authored, renderer\]/); assert.doesNotMatch(environment, /RoomEnvironment/); assert.match(environment, /sceneDefinitions/); assert.match(environment, /targets\.forEach\(\(target\) => target\.dispose\(\)\)/); assert.match(post, /SceneTelemetryPass/); assert.match(post, /gl\.info\.autoReset = false/);
+  assert.match(heroAsset, /if \(!material\.map\)/); assert.match(heroAsset, /if \(!material\.normalMap\)/); assert.match(heroAsset, /if \(!material\.aoMap\)/); assert.match(canvas, /PCFShadowMap/); assert.match(canvas, /shadowMap\.autoUpdate = false/); assert.match(camera, /SHADOW_POSITION_EPSILON = 0\.012/); assert.match(camera, /previousShadowSun = useRef<THREE\.Vector3 \| null>\(null\)/); assert.match(camera, /shadowMap\.needsUpdate = true/); assert.doesNotMatch(camera, /SHADOW_INTENSITY_EPSILON|previousSunIntensity/); assert.match(heroAsset, /\[assetUrl, authored, renderer\]/); assert.match(heroAsset, /hero-load-failed:/); assert.doesNotMatch(environment, /RoomEnvironment/); assert.match(environment, /sceneDefinitions/); assert.match(environment, /targets\.forEach\(\(target\) => target\.dispose\(\)\)/); assert.match(post, /SceneTelemetryPass/); assert.match(post, /gl\.info\.autoReset = false/);
 });
