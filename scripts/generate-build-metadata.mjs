@@ -6,9 +6,13 @@ import { relative, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const sha256 = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
 const requiredAssets = ["hero-campus", "manufacturing", "power-generation", "data-centers", "recycling", "closing-platform"];
+const r6Heroes = ["integrated-campus", "manufacturing-line", "substation-bess", "data-center-cooling", "recycling-intake", "connected-campus"];
 const approvedManifest = resolve(root, "public/models/approved/manifest.json");
 const approvedAssetsPresent = existsSync(approvedManifest) && requiredAssets.every((name) => existsSync(resolve(root, `public/models/approved/${name}.glb`)));
 const approvedAssetsManifestSha256 = existsSync(approvedManifest) ? sha256(approvedManifest) : null;
+const r6Manifest = resolve(root, "public/models/r6/manifest.json");
+const r6RuntimeAssetsPresent = existsSync(r6Manifest) && r6Heroes.every((hero) => existsSync(resolve(root, `public/models/r6/hero/${hero}/lod0.glb`)));
+const r6ManifestSha256 = existsSync(r6Manifest) ? sha256(r6Manifest) : null;
 const approvedBrandPath = resolve(root, "public/brand/convalt-logo.svg");
 const approvedBrandPresent = existsSync(approvedBrandPath);
 const approvedBrandSha256 = approvedBrandPresent ? sha256(approvedBrandPath) : null;
@@ -75,19 +79,26 @@ if (existsSync(approvalFile)) {
 
 const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 const source = releaseSourceDigest();
+const allowedAssetSets = new Set(["approved", "stage3", "r4", "r5", "r6"]);
+const requestedAssetSet = process.env.NEXT_PUBLIC_3D_ASSET_SET || "stage3";
+const assetSet = allowedAssetSets.has(requestedAssetSet) ? requestedAssetSet : "stage3";
+const gitCommit = process.env.RENDER_GIT_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || null;
 const stable = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   packageVersion: pkg.version,
   stage: 6,
-  buildId: process.env.BUILD_ID || "unknown",
+  buildId: process.env.BUILD_ID || gitCommit || "unknown",
+  gitCommit,
   deploymentTier: process.env.DEPLOYMENT_TIER || "unknown",
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "",
   allowIndexing: process.env.NEXT_PUBLIC_ALLOW_INDEXING === "1",
-  assetSet: process.env.NEXT_PUBLIC_3D_ASSET_SET === "approved" ? "approved" : "stage3",
+  assetSet,
   brandSet: process.env.NEXT_PUBLIC_BRAND_ASSET_SET === "approved" ? "approved" : "stage4",
   turnstileSiteKeyConfigured: Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY),
   approvedAssetsPresent,
   approvedAssetsManifestSha256,
+  r6RuntimeAssetsPresent,
+  r6ManifestSha256,
   approvedBrandPresent,
   approvedBrandSha256,
   contentApproval,
@@ -99,4 +110,4 @@ const metadata = { ...stable, generatedAt: new Date().toISOString(), configDiges
 const outDir = resolve(root, "generated");
 mkdirSync(outDir, { recursive: true });
 writeFileSync(resolve(outDir, "build-metadata.json"), JSON.stringify(metadata, null, 2) + "\n");
-console.log(`Build metadata written: generated/build-metadata.json; sourceDigest=${source.digest.slice(0, 12)}; contentApproval=${contentApproval.valid ? "valid" : "not-approved"}; assets=${approvedAssetsPresent ? "approved-present" : "not-approved"}.`);
+console.log(`Build metadata written: generated/build-metadata.json; assetSet=${assetSet}; r6=${r6RuntimeAssetsPresent ? "present" : "missing"}; sourceDigest=${source.digest.slice(0, 12)}; contentApproval=${contentApproval.valid ? "valid" : "not-approved"}.`);
