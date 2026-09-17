@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Require loaded WebGL heroes and actual desktop/mobile screenshot evidence.
+"""Capture the real high/medium WebGL pipelines in stable reduced-motion poses.
 
-Software-renderer timings are diagnostic, never physical-laptop FPS sign-off.
-Full Chromium's compositor is used instead of the older headless-shell build.
+CPU-rendered stills verify appearance, not a desktop animation/FPS sign-off.
+An independent medium-tier mobile check exercises normal animated navigation.
 """
 import argparse
 import json
@@ -22,7 +22,10 @@ def screenshot(page, path):
 
 
 def capture(browser, base, out, quality, width, height):
-    context = browser.new_context(viewport={'width':width,'height':height},device_scale_factor=1)
+    # Keep the full requested render quality and LOD0. Reduced motion only
+    # stabilizes the authored camera and rotors for reproducible visual review.
+    context = browser.new_context(viewport={'width':width,'height':height},
+        device_scale_factor=1,reduced_motion='reduce')
     page = context.new_page()
     errors, warnings, failed, request_failures, frames = [], [], [], [], []
     page.on('pageerror',lambda error:errors.append(str(error)))
@@ -30,15 +33,16 @@ def capture(browser, base, out, quality, width, height):
     page.on('response',lambda response:failed.append(f'{response.status} {response.url}') if response.status>=400 else None)
     page.on('requestfailed',lambda request:request_failures.append(f'{request.failure} {request.url}'))
     try:
-        page.goto(base.rstrip('/')+'/?'+urlencode({'quality':quality,'qa':'1'}),wait_until='domcontentloaded',timeout=60000)
+        page.goto(base.rstrip('/')+'/?'+urlencode({'quality':quality}),wait_until='domcontentloaded',timeout=60000)
         page.wait_for_selector('.experience-canvas canvas',timeout=60000)
+        page.wait_for_function("document.documentElement.dataset.motion === 'reduced'",timeout=30000)
         controls=page.locator('.story-progress .progress-dot')
         assert controls.count()==6, 'Six chapter controls are required'
         for sequence,index in enumerate([0,1,2,3,4,5,3]):
             controls.nth(index).click(timeout=60000)
-            page.wait_for_function("i => document.querySelectorAll('.progress-dot')[i]?.dataset.active === 'true'",arg=index,timeout=30000)
+            page.wait_for_function("i => document.querySelectorAll('.progress-dot')[i]?.dataset.active === 'true'",arg=index,timeout=60000)
             page.wait_for_function("hero => window.__CONVALT_ACTIVE_HERO__?.hero === hero && window.__CONVALT_ACTIVE_HERO__?.ready",arg=HEROES[index],timeout=60000)
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(2200)
             assert page.locator('[data-r6-static-fallback="true"]').count()==0, 'Fallback is not immersive proof'
             assert page.locator('.experience-canvas canvas').count()==1
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), 'Horizontal overflow'
@@ -48,24 +52,43 @@ def capture(browser, base, out, quality, width, height):
                 'telemetry':page.evaluate('window.__CONVALT_PERF__?.samples?.at(-1) || null'),
                 'screenshotCaptured':False}
             frames.append(frame)
-            print('CAPTURE',quality,HEROES[index],json.dumps(frame),flush=True)
+            print('POSED_CAPTURE',quality,HEROES[index],flush=True)
             started=time.monotonic()
             screenshot(page,out/name)
             frame['screenshotCaptured']=True
             frame['captureSeconds']=round(time.monotonic()-started,3)
-        page.evaluate("document.documentElement.dataset.motion='reduced'")
-        controls.nth(1).click()
-        page.wait_for_function("window.__CONVALT_ACTIVE_HERO__?.hero === 'manufacturing-line'",timeout=60000)
-        page.wait_for_timeout(1600)
-        screenshot(page,out/f'{quality}-manufacturing-reduced-motion.png')
         assert not errors, '\n'.join(errors[:15])
         assert not failed, '\n'.join(failed[:15])
         assert not request_failures, '\n'.join(request_failures[:15])
-        return {'quality':quality,'viewport':[width,height],'frames':frames,'errors':errors,
-                'failedResponses':failed,'requestFailures':request_failures,'pass':True}
+        return {'quality':quality,'viewport':[width,height],'captureMode':'reduced-motion WebGL poses',
+            'frames':frames,'errors':errors,'failedResponses':failed,'requestFailures':request_failures,'pass':True}
     finally:
         (out/f'{quality}-diagnostics.json').write_text(json.dumps({'frames':frames,'errors':errors,
             'warnings':warnings,'failedResponses':failed,'requestFailures':request_failures},indent=2))
+        context.close()
+
+
+def animated_mobile_navigation(browser,base):
+    context=browser.new_context(viewport={'width':430,'height':932},device_scale_factor=1,reduced_motion='no-preference')
+    page=context.new_page()
+    errors=[]
+    page.on('pageerror',lambda error:errors.append(str(error)))
+    try:
+        page.goto(base.rstrip('/')+'/?quality=medium',wait_until='domcontentloaded',timeout=60000)
+        page.wait_for_function("window.__CONVALT_ACTIVE_HERO__?.hero === 'integrated-campus'",timeout=60000)
+        page.wait_for_function("document.documentElement.dataset.motion !== 'reduced'",timeout=30000)
+        result=[]
+        for index in [1,2,3,4,5,0]:
+            page.locator('.story-progress .progress-dot').nth(index).click(timeout=60000)
+            started=time.monotonic()
+            page.wait_for_function("i => document.querySelectorAll('.progress-dot')[i]?.dataset.active === 'true'",arg=index,timeout=120000)
+            page.wait_for_function("hero => window.__CONVALT_ACTIVE_HERO__?.hero === hero && window.__CONVALT_ACTIVE_HERO__?.ready",arg=HEROES[index],timeout=60000)
+            page.wait_for_timeout(2600)
+            result.append({'hero':HEROES[index],'transitionSeconds':round(time.monotonic()-started,3)})
+        assert not errors, '\n'.join(errors)
+        assert page.locator('[data-r6-static-fallback="true"]').count()==0
+        return {'pass':True,'quality':'medium','viewport':[430,932],'frames':result,'errors':errors}
+    finally:
         context.close()
 
 
@@ -92,7 +115,9 @@ def main():
     parser.add_argument('--out',default='artifacts/cinematic/chapters')
     args=parser.parse_args()
     out=Path(args.out); out.mkdir(parents=True,exist_ok=True)
-    report={'pass':False,'fpsSignOff':False,'renderer':'Full Chromium software WebGL; visual/functional proof only'}
+    report={'pass':False,'fpsSignOff':False,'highQualityDesktopAnimationSignOff':False,
+        'renderer':'Full Chromium SwiftShader; posed visual proof and separate medium-tier navigation'}
+    failures=[]
     try:
         with sync_playwright() as p:
             browser=p.chromium.launch(channel='chromium',executable_path=os.environ.get('CHROMIUM_EXECUTABLE'),
@@ -100,18 +125,25 @@ def main():
                                     '--enable-webgl','--ignore-gpu-blocklist'])
             try:
                 report['browserVersion']=browser.version
-                report['desktop']=capture(browser,args.url,out,'high',1440,900)
-                report['mobile']=capture(browser,args.url,out,'medium',430,932)
-                report['fallback']=fallback(browser,args.url,out)
-                report['pass']=True
+                checks=[('fallback',lambda:fallback(browser,args.url,out)),
+                        ('mobilePosed',lambda:capture(browser,args.url,out,'medium',430,932)),
+                        ('desktopPosed',lambda:capture(browser,args.url,out,'high',1440,900)),
+                        ('animatedMobile',lambda:animated_mobile_navigation(browser,args.url))]
+                for name,check in checks:
+                    try:
+                        report[name]=check()
+                    except Exception as error:
+                        report[name]={'pass':False,'error':str(error)}
+                        failures.append(name)
+                    (out/'report.json').write_text(json.dumps(report,indent=2))
+                report['pass']=not failures
             finally:
                 browser.close()
-    except Exception as error:
-        report['error']=str(error)
-        raise
     finally:
         (out/'report.json').write_text(json.dumps(report,indent=2))
-    print('Six-hero desktop/mobile/revisit/reduced-motion/fallback proof passed.')
+    if failures:
+        raise RuntimeError('Failed checks: '+', '.join(failures))
+    print('Six-hero high/medium posed proof, revisits, mobile animation and forced fallback passed.')
 
 if __name__=='__main__':
     main()
