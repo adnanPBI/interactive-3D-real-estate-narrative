@@ -1,0 +1,45 @@
+/* R6.1.7 production hero-runtime hardening.
+   Keep an authored frame visible until real WebGL geometry is confirmed ready,
+   and make the non-WebGL fallback preserve the complete hero composition. */
+
+.experience-loading-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--corp-paper, #f5f3ef);
+}
+
+.experience-loading-cover .experience-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.experience-fallback--r6 .fallback-scene {
+  background-color: var(--corp-paper, #f5f3ef);
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: right center;
+  filter: contrast(1.06) saturate(.96);
+}
+
+/* The CPU-authored 16:9 frame needs more fill on narrow screens, but it must not
+   zoom away the industrial subject on desktop/widescreen viewports. */
+@media (max-width: 900px) {
+  .experience-fallback--r6 .fallback-scene {
+    background-size: cover;
+    background-position: 58% center;
+  }
+}
+
+/* Do not hide the 3D stage just because the user asks for reduced motion.
+   Animation timing is already frozen by the runtime; the hero remains visible. */
+@media (prefers-reduced-motion: reduce) {
+  .experience-loading-cover,
+  .experience-fallback--r6 .fallback-scene {
+    transition: none !important;
+  }
+}
