@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Compatibility bridge between the R6.1 asset builder and the R6 V2 recipes.
+"""Compatibility bridge between the R6.1 asset builder and the R6 recipes.
 
-Manufacturing remains on its authoritative visual-master path. The other five
-recipes retain their context and gain deterministic authored R6.1.6 details.
+Manufacturing stays source-derived. The five other heroes use a dedicated clean
+R4 context plus one R6 authored detail layer, avoiding stacked R4/R5/R6 shells.
 """
 from __future__ import annotations
 from collections import OrderedDict
@@ -58,15 +58,11 @@ RECIPES = OrderedDict([
 ])
 
 
-def _context_path(legacy_id: str, lod: str) -> Path:
-    if lod == "lod0":
-        return ROOT / "public" / "models" / "r5" / "high" / f"{legacy_id}.glb"
-    if lod == "lod1":
-        return ROOT / "public" / "models" / "r5" / "medium" / f"{legacy_id}.glb"
-    staged = ROOT / "public" / "models" / "stage3" / f"{legacy_id}.glb"
-    if staged.is_file():
-        return staged
-    return ROOT / "public" / "models" / "r5" / "medium" / f"{legacy_id}.glb"
+def _context_path(legacy_id: str, _lod: str) -> Path:
+    clean = ROOT / "public" / "models" / "r6" / "context" / f"{legacy_id}.glb"
+    if not clean.is_file():
+        raise FileNotFoundError(f"Missing R6.1.7 clean context: {clean}")
+    return clean
 
 
 def _build_recipe(semantic_id: str, legacy_id: str, module_name: str, level: int) -> AuthoredRecipe:
@@ -74,8 +70,6 @@ def _build_recipe(semantic_id: str, legacy_id: str, module_name: str, level: int
         raise ValueError(level)
     lod = ("lod0", "lod1", "lod2")[level]
     base_path = _context_path(legacy_id, lod)
-    if not base_path.is_file():
-        raise FileNotFoundError(f"Missing R6 context for {semantic_id}/{lod}: {base_path}")
     base = trimesh.load(base_path, force="scene", process=False)
     if not isinstance(base, trimesh.Scene):
         base = trimesh.Scene(base)
@@ -84,9 +78,9 @@ def _build_recipe(semantic_id: str, legacy_id: str, module_name: str, level: int
     if not isinstance(detail, trimesh.Scene):
         detail = trimesh.Scene(detail)
     cinematic = importlib.import_module("cinematic")
-    detail = core.combine(detail, cinematic.build(core.ctx, semantic_id, level), f"r616-{semantic_id}")
+    detail = core.combine(detail, cinematic.build(core.ctx, semantic_id, level), f"r617-{semantic_id}")
     components = tuple(sorted(str(name) for name in detail.geometry.keys()))
-    combined = core.combine(base, detail, f"r61-{semantic_id}-{lod}")
+    combined = core.combine(base, detail, f"r617-{semantic_id}-{lod}")
     return AuthoredRecipe(combined, components)
 
 

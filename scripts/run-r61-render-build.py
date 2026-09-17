@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Build source-derived runtime assets, preserving the reviewed visual master.
-
-The existing road/vehicle filter remains. R6.1.6 also corrects closed inward
-shells on runtime copies, retaining positions, UVs, material names and topology.
-"""
+"""Build source-derived R6.1.7 runtime assets without stacked/coplanar shapes."""
 from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import struct
 import sys
+import numpy as np
+import trimesh
 from r616_geometry import repair_closed_inward
+from r617_manufacturing import is_legacy_roof_artifact, enhance_runtime
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -41,8 +40,7 @@ def fixed_dfd_rgba8(srgb: bool) -> bytes:
 ROAD_VEHICLE_TOKENS = (
     "road", "asphalt", "driveway", "street", "parking", "parked",
     "car", "truck", "vehicle", "forklift", "servicecart",
-    "lane_mark", "lane-mark", "road_mark", "road-mark",
-    "aisleline", "aisleend",
+    "lane_mark", "lane-mark", "road_mark", "road-mark", "aisleline", "aisleend",
 )
 
 
@@ -56,20 +54,51 @@ def install_manufacturing_filter(builder) -> None:
     original = builder.select_source_meshes
     def filtered(source, runtime_lod: int):
         selected = original(source, runtime_lod)
+        scene_max_y = max(float(mesh.bounds[1][1]) for _node, mesh in selected)
         kept, removed = [], []
         repaired = 0
         for node, mesh in selected:
+            reason = None
             if _is_road_or_vehicle(builder, node, mesh):
-                removed.append((node, builder.material_name(mesh), int(len(mesh.faces))))
+                reason = "road-or-vehicle"
+            elif runtime_lod < 2 and is_legacy_roof_artifact(node, mesh, scene_max_y):
+                reason = "marked-roof-artifact"
+            if reason:
+                removed.append((node, builder.material_name(mesh), int(len(mesh.faces)), reason))
                 continue
             repaired += int(repair_closed_inward(mesh))
             kept.append((node, mesh))
-        print(f"R6.1.6 manufacturing filter lod{runtime_lod}: "
-              f"removed={len(removed)} kept={len(kept)} outwardRepaired={repaired}")
-        for node, material, triangles in removed[:100]:
-            print(f"  removed component node={node} material={material} triangles={triangles}")
+        print(f"R6.1.7 manufacturing filter lod{runtime_lod}: removed={len(removed)} kept={len(kept)} outwardRepaired={repaired}")
+        for node, material, triangles, reason in removed[:120]:
+            print(f"  removed {reason} node={node} material={material} triangles={triangles}")
         return kept
     builder.select_source_meshes = filtered
+
+
+def install_manufacturing_enhancer(builder) -> None:
+    original = builder.merge_runtime_by_material
+    def enhanced(selected, out: Path):
+        triangles, bytes_, draws, components = original(selected, out)
+        lod = {"lod0": 0, "lod1": 1, "lod2": 2}.get(out.stem)
+        if lod is None:
+            return triangles, bytes_, draws, components
+        loaded = trimesh.load(out, force="scene", process=False)
+        scene = loaded if isinstance(loaded, trimesh.Scene) else trimesh.Scene(loaded)
+        added = enhance_runtime(scene, lod)
+        if added:
+            out.write_bytes(trimesh.exchange.gltf.export_glb(scene, include_normals=True))
+            check = trimesh.load(out, force="scene", process=False)
+            check_scene = check if isinstance(check, trimesh.Scene) else trimesh.Scene(check)
+            triangles = sum(int(len(mesh.faces)) for mesh in check_scene.geometry.values() if hasattr(mesh, "faces"))
+            bytes_ = out.stat().st_size
+            draws = len(check_scene.geometry)
+            components += added
+            bounds = np.asarray(check_scene.bounds, dtype=float)
+            if not np.isfinite(bounds).all():
+                raise RuntimeError("R6.1.7 manufacturing enhancement produced invalid bounds")
+            print(f"R6.1.7 manufacturing enhancement {out.stem}: addedParts={added} triangles={triangles} draws={draws}")
+        return triangles, bytes_, draws, components
+    builder.merge_runtime_by_material = enhanced
 
 
 def main() -> int:
@@ -78,6 +107,7 @@ def main() -> int:
     builder = load(ROOT / "scripts" / "build-r61-assets.py", "r61_render_builder")
     builder.load_legacy = lambda: compat
     install_manufacturing_filter(builder)
+    install_manufacturing_enhancer(builder)
     sys.argv = [str(ROOT / "scripts" / "build-r61-assets.py")]
     builder.main()
     return 0

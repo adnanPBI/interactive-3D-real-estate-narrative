@@ -8,15 +8,15 @@ def build(ctx, lod: str):
     b = add_context(r4.Builder(f"r6-recycling-{lod}"), r4)
     high=lod=="lod0"; medium=lod=="lod1"
 
-    # Processing hall plus dedicated shredder/sorter/baler train.
+    # The R4 hall is removed from clean context; one R6 hall owns this footprint.
     bevel_box(b,(7.2,2.75,3.55),(3.0,1.375,-1.75),"Facade",.12)
-    bevel_box(b,(2.3,1.90,2.0),(-4.8,.95,-.8),"Graphite",.09)
     for x in np.linspace(.2,5.8,12 if high else 7):
         b.box((.035,2.18,.09),(float(x),1.28,.05),"Aluminum")
     for y in (.48,1.05,1.65,2.25):
         b.box((6.30,.025,.08),(3.0,y,.07),"Aluminum")
 
-    # Main sorting line with distinct drums, rollers and transfer chutes.
+    # Keep the existing intake canopy visible. Do not add a second graphite
+    # enclosure through its left support, which caused screenshot-4 blinking.
     r5.sorter_drum(b,(-2.6,0,.85),.86 if high else .70)
     r5.sorter_drum(b,(-.25,0,.85),.78 if high else .66)
     r4.conveyor(b,(-6.0,0,.86),(5.9,0,.86),.78,.84)
@@ -44,7 +44,6 @@ def build(ctx, lod: str):
                 r4.bale(b,(1.5+col*.56,0,2.05+row*.48),.38,"Recycled" if (row+col)%2 else "Steel")
 
     if high:
-        # Static plant/process detail only; vehicles are intentionally omitted.
         for i,x in enumerate((-6.35,-5.35,-4.35)):
             bevel_box(b,(.82,.68,1.10),(x,.34,2.65),"Graphite" if i%2 else "Recycled",.05)
         r4.pile(b,(-6.3,.08,-3.1),.82,55,"Recycled",106)
