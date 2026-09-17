@@ -1,0 +1,73 @@
+name: Cinematic hero build and visual evidence
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/r616-cinematic-heroes]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cinematic-heroes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cinematic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_3D_ASSET_SET: r6
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_ALLOW_INDEXING: '0'
+      DEPLOYMENT_TIER: staging
+      ENABLE_ACCEPTANCE_QA: '1'
+      R6_ACCEPTANCE_REQUIRE_IMMERSIVE: '1'
+      BUILD_ID: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive exact source for review
+        run: |
+          mkdir -p artifacts/cinematic
+          git archive --format=zip HEAD -o artifacts/cinematic/source.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cinematic-source-${{ github.sha }}
+          path: artifacts/cinematic/source.zip
+          retention-days: 7
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13.5'
+      - run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build same generated assets as production
+        run: RENDER=true npm run build
+      - name: Cinematic regression tests
+        run: |
+          node --test tests/r616-cinematic.test.mjs
+          python3 tests/test_r616_geometry.py
+          python3 tests/test_r61_source_identity.py
+          python3 tests/test_r617_no_flicker.py
+      - run: pip install -r requirements-acceptance.txt
+      - run: playwright install --with-deps chromium
+      - name: Capture all six chapters
+        run: |
+          npm start > artifacts/cinematic/server.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then break; fi
+            sleep 1
+          done
+          python3 scripts/qa-r616-cinematic.py --url http://127.0.0.1:3000 --out artifacts/cinematic/chapters
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cinematic-evidence-${{ github.sha }}
+          path: |
+            artifacts/cinematic
+            artifacts/r6-cpu-fallback-proof.json
+            assets-source/r6/heroes/manufacturing-line/source-manifest.json
+          retention-days: 14

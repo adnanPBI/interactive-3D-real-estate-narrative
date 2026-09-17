@@ -1,8 +1,4 @@
-"""Shared hard-surface helpers for the six bespoke R6 hero blueprints.
-
-These helpers are intentionally small.  Scene layout remains hand-authored in one
-module per hero rather than being generated from a generic campus template.
-"""
+"""Shared hard-surface helpers for the six bespoke R6 hero blueprints."""
 from __future__ import annotations
 import math
 import numpy as np
@@ -18,54 +14,46 @@ def _ring_points(width: float, depth: float, chamfer: float):
     ], dtype=float)
 
 
-def _prism_between_rings(bottom: np.ndarray, top: np.ndarray, y0: float, y1: float) -> trimesh.Trimesh:
-    n = len(bottom)
-    verts = np.vstack([
-        np.column_stack([bottom[:, 0], np.full(n, y0), bottom[:, 1]]),
-        np.column_stack([top[:, 0], np.full(n, y1), top[:, 1]]),
-    ])
-    faces = []
-    for i in range(n):
-        j = (i + 1) % n
-        faces.extend([[i, j, n + j], [i, n + j, n + i]])
-    # Caps as triangle fans.  Convex rings make this deterministic and robust.
-    center_bottom = len(verts)
-    center_top = center_bottom + 1
-    verts = np.vstack([verts, [[0, y0, 0], [0, y1, 0]]])
-    for i in range(n):
-        j = (i + 1) % n
-        faces.append([center_bottom, j, i])
-        faces.append([center_top, n + i, n + j])
-    return trimesh.Trimesh(vertices=verts, faces=np.asarray(faces, dtype=int), process=False)
-
-
 def bevel_mesh(extents, bevel=0.05) -> trimesh.Trimesh:
-    """A true chamfered box with vertical and horizontal bevel geometry.
+    """Closed outward-facing chamfer shell without buried end caps.
 
-    The body is built as three tapered chamfered prisms.  Unlike a shader-only
-    normal trick, the resulting edge faces catch highlights and remain visible in
-    silhouettes, which is the main R6 hard-surface fidelity requirement.
+    The former three capped prisms were wound inward. Four shared rings
+    preserve real bevel highlights and eliminate those internal surfaces.
     """
     width, height, depth = map(float, extents)
-    b = max(0.002, min(float(bevel), width * 0.12, height * 0.22, depth * 0.12))
+    if not all(math.isfinite(v) and v > 0 for v in (width, height, depth)):
+        raise ValueError("bevel extents must be finite and positive")
+    b = min(max(float(bevel), 0.0001), min(width, height, depth) * 0.20)
     outer = _ring_points(width, depth, b)
-    inset = _ring_points(max(width - 2*b, b*4), max(depth - 2*b, b*4), max(b * 0.55, 0.001))
-    low = _prism_between_rings(inset, outer, -height/2, -height/2 + b)
-    body = _prism_between_rings(outer, outer, -height/2 + b, height/2 - b)
-    top = _prism_between_rings(outer, inset, height/2 - b, height/2)
-    return trimesh.util.concatenate([low, body, top])
+    inset = _ring_points(width - 2*b, depth - 2*b, b * 0.55)
+    rings = (inset, outer, outer, inset)
+    ys = (-height/2, -height/2+b, height/2-b, height/2)
+    vertices = np.vstack([np.column_stack([r[:, 0], np.full(8, y), r[:, 1]])
+                          for r, y in zip(rings, ys)])
+    vertices = np.vstack([vertices, [[0, ys[0], 0], [0, ys[-1], 0]]])
+    faces = []
+    for level in range(3):
+        for i in range(8):
+            j = (i + 1) % 8
+            a, c, d, e = level*8+i, level*8+j, (level+1)*8+j, (level+1)*8+i
+            faces.extend([[a, d, c], [a, e, d]])
+    for i in range(8):
+        j = (i + 1) % 8
+        faces.extend([[32, i, j], [33, 24+j, 24+i]])
+    return trimesh.Trimesh(vertices=vertices, faces=np.asarray(faces), process=False)
 
 
 def bevel_box(builder, extents, pos, material, bevel=0.05, rot_y=0.0, repeat=(1.0, 1.0)):
     mesh = bevel_mesh(extents, bevel)
     builder.add(mesh, material, builder_transform(builder, pos, rot_y), repeat=repeat)
+    # Face-space projection also gives vertical walls noncollapsed UVs.
+    from cinematic import project_faces
+    builder.meshes[material][-1] = project_faces(builder.meshes[material][-1])
 
 
 def builder_transform(builder, pos, rot_y=0.0):
-    # Builders passed to the hero modules come from the R4 authoring layer.
     module = getattr(builder, "_r6_context", None)
     if module is None:
-        # Fallback import-free transform; keeps this file usable in isolation.
         T = trimesh.transformations.translation_matrix(pos)
         R = trimesh.transformations.rotation_matrix(rot_y, [0, 1, 0])
         return T @ R
@@ -99,12 +87,13 @@ def cable_bundle(builder, start, end, count=5, radius=.014, height_offset=.0, ma
 
 
 def safety_rail(builder, start, end, height=.72, posts=10, material="Aluminum"):
+    """Keep a roof/platform rail attached to its authored base elevation."""
     p1 = np.asarray(start, float); p2 = np.asarray(end, float)
     for t in np.linspace(0, 1, posts):
         p = p1 * (1-t) + p2 * t
-        builder.cyl(.018, height, (float(p[0]), height/2, float(p[2])), material, sections=10)
+        builder.cyl(.018, height, (float(p[0]), float(p[1])+height/2, float(p[2])), material, sections=10)
     for y in (height*.55, height):
-        builder.cyl_between((p1[0], y, p1[2]), (p2[0], y, p2[2]), .020, material, sections=10)
+        builder.cyl_between(tuple(p1 + [0, y, 0]), tuple(p2 + [0, y, 0]), .020, material, sections=10)
 
 
 def service_stair(builder, origin, width=1.0, run=1.8, rise=1.2, steps=10, yaw=0.0):
@@ -115,7 +104,6 @@ def service_stair(builder, origin, width=1.0, run=1.8, rise=1.2, steps=10, yaw=0
         pz = z + math.cos(yaw) * run * t
         py = y + rise * t
         builder.box((width, .055, run/steps * .92), (px, py, pz), "Steel", rot_y=yaw)
-    # Stringers + rails.
     a=(x-width*.46*math.cos(yaw), y, z+width*.46*math.sin(yaw))
     b=(x+math.sin(yaw)*run-width*.46*math.cos(yaw), y+rise, z+math.cos(yaw)*run+width*.46*math.sin(yaw))
     builder.cyl_between(a,b,.035,"Steel",10)
