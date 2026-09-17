@@ -58,6 +58,7 @@ export function HomeExperience() {
   const setTimelineProgress = useExperienceStore((state) => state.setTimelineProgress);
   const setTargetProgress = useExperienceStore((state) => state.setTargetProgress);
   const setActiveChapter = useExperienceStore((state) => state.setActiveChapter);
+  const handleCanvasReady = useCallback(() => setCanvasReady(true), []);
 
   useEffect(() => setQuality(runtimeFallback ? "fallback" : quality), [quality, runtimeFallback, setQuality]);
   useEffect(() => {
@@ -218,14 +219,23 @@ export function HomeExperience() {
     return () => { tween.kill(); };
   }, [activeChapter, quality]);
 
+  const renderStaticOnly = quality === "fallback" || runtimeFallback;
+
   return (
     <div className="experience-shell experience-shell--corporate" ref={shellRef} data-interacted={hasInteracted}>
-      {quality === "fallback" || runtimeFallback ? (
+      {renderStaticOnly ? (
         <StaticSceneFallback activeChapter={activeChapter} />
       ) : (
-        <ExperienceErrorBoundary onError={() => setRuntimeFallback(true)}>
-          <ExperienceCanvas quality={quality} active={canvasActive} onFirstSceneReady={() => setCanvasReady(true)} />
-        </ExperienceErrorBoundary>
+        <>
+          {!canvasReady && (
+            <div className="experience-loading-cover" aria-hidden="true" data-r6-loading-cover="true">
+              <StaticSceneFallback activeChapter={activeChapter} />
+            </div>
+          )}
+          <ExperienceErrorBoundary onError={() => setRuntimeFallback(true)}>
+            <ExperienceCanvas quality={quality} active={canvasActive} onFirstSceneReady={handleCanvasReady} />
+          </ExperienceErrorBoundary>
+        </>
       )}
 
       <nav className="story-progress" aria-label="Story chapters">
