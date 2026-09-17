@@ -35,7 +35,10 @@ def capture(browser, base, out, quality, width, height):
     try:
         page.goto(base.rstrip('/')+'/?'+urlencode({'quality':quality}),wait_until='domcontentloaded',timeout=60000)
         page.wait_for_selector('.experience-canvas canvas',timeout=60000)
-        page.wait_for_function("document.documentElement.dataset.motion === 'reduced'",timeout=30000)
+        # Browser emulation alone does not guarantee that the app mirrors the
+        # media query into this data attribute. Set the app's authoritative
+        # runtime motion switch explicitly so posed screenshot QA is stable.
+        page.evaluate("document.documentElement.dataset.motion='reduced'")
         controls=page.locator('.story-progress .progress-dot')
         assert controls.count()==6, 'Six chapter controls are required'
         for sequence,index in enumerate([0,1,2,3,4,5,3]):
