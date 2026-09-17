@@ -8,6 +8,8 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'assets-source/r6/authoring'))
 from shared import bevel_mesh,safety_rail
 from cinematic import project_faces
+sys.path.insert(0,str(ROOT/'scripts'))
+from r616_geometry import repair_closed_inward
 
 class GeometryTests(unittest.TestCase):
     def test_bevel_is_closed_outward_without_internal_caps(self):
@@ -37,6 +39,24 @@ class GeometryTests(unittest.TestCase):
         self.assertEqual(result.visual.material.name,'Facade')
         np.testing.assert_allclose(result.bounds,source.bounds)
         np.testing.assert_allclose(result.volume,source.volume)
+
+    def test_runtime_winding_repair_preserves_uvs_and_source(self):
+        source=bevel_mesh((5,3,4))
+        source.visual=trimesh.visual.TextureVisuals(material=trimesh.visual.material.PBRMaterial(name='Facade'))
+        source=project_faces(source)
+        source.invert()
+        runtime=source.copy()
+        uv=runtime.visual.uv.copy()
+        vertices=runtime.vertices.copy()
+        self.assertTrue(repair_closed_inward(runtime))
+        self.assertGreater(runtime.volume,0)
+        self.assertLess(source.volume,0)
+        np.testing.assert_array_equal(runtime.vertices,vertices)
+        np.testing.assert_array_equal(runtime.visual.uv,uv)
+        self.assertFalse(repair_closed_inward(runtime))
+        opened=source.copy()
+        opened.update_faces(np.arange(len(opened.faces)-1))
+        self.assertFalse(repair_closed_inward(opened))
 
     def test_roof_rail_keeps_authored_elevation(self):
         class Capture:

@@ -5,6 +5,7 @@ Software-renderer timings are diagnostic, never physical-laptop FPS sign-off.
 """
 import argparse
 import json
+import os
 from pathlib import Path
 from urllib.parse import urlencode
 from playwright.sync_api import sync_playwright
@@ -48,6 +49,10 @@ def capture(browser, base, out, quality, width, height):
         return {'quality':quality,'viewport':[width,height],'frames':frames,'errors':errors,'failedResponses':failed,'pass':True}
     finally:
         (out/f'{quality}-diagnostics.json').write_text(json.dumps({'frames':frames,'errors':errors,'failedResponses':failed},indent=2))
+        try:
+            page.screenshot(path=str(out/f'{quality}-last-state.png'),timeout=5000)
+        except Exception:
+            pass
         context.close()
 
 
@@ -77,7 +82,7 @@ def main():
     report={'pass':False,'fpsSignOff':False,'renderer':'Chromium software WebGL; visual/functional proof only'}
     try:
         with sync_playwright() as p:
-            browser=p.chromium.launch(headless=True,args=['--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader','--enable-webgl','--ignore-gpu-blocklist'])
+            browser=p.chromium.launch(executable_path=os.environ.get('CHROMIUM_EXECUTABLE'),headless=True,args=['--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader','--enable-webgl','--ignore-gpu-blocklist'])
             try:
                 report['desktop']=capture(browser,args.url,out,'high',1440,900)
                 report['mobile']=capture(browser,args.url,out,'medium',430,932)

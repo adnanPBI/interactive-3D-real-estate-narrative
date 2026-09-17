@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Run the canonical R6.1 builder against the normalized R6 compatibility API.
+"""Build source-derived runtime assets, preserving the reviewed visual master.
 
-R6.1.4 filters road/vehicle-looking components from the Manufacturing
-visual-master when producing runtime LODs. The visual-master itself remains
-untouched so reviewed industrial geometry stays the source of truth.
+The existing road/vehicle filter remains. R6.1.6 also corrects closed inward
+shells on runtime copies, retaining positions, UVs, material names and topology.
 """
 from __future__ import annotations
-
 import importlib.util
 from pathlib import Path
 import struct
 import sys
+from r616_geometry import repair_closed_inward
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,8 +31,7 @@ def fixed_dfd_rgba8(srgb: bool) -> bytes:
     descriptor_size = 24 + len(samples) * 16
     total_size = 4 + descriptor_size
     header = struct.pack(
-        "<IHHHH8B8B",
-        total_size, 0, 0, 2, descriptor_size,
+        "<IHHHH8B8B", total_size, 0, 0, 2, descriptor_size,
         1, 1, 2 if srgb else 1, 0, 0, 0, 0, 0,
         4, 0, 0, 0, 0, 0, 0, 0,
     )
@@ -44,9 +42,6 @@ ROAD_VEHICLE_TOKENS = (
     "road", "asphalt", "driveway", "street", "parking", "parked",
     "car", "truck", "vehicle", "forklift", "servicecart",
     "lane_mark", "lane-mark", "road_mark", "road-mark",
-    # In the Manufacturing master these long Safety_Amber floor strips present
-    # as a black/yellow exterior road in the hero camera, so remove them from
-    # runtime derivatives while retaining the floor, conveyors, cranes, etc.
     "aisleline", "aisleend",
 )
 
@@ -59,24 +54,21 @@ def _is_road_or_vehicle(builder, node: str, mesh) -> bool:
 
 def install_manufacturing_filter(builder) -> None:
     original = builder.select_source_meshes
-
     def filtered(source, runtime_lod: int):
         selected = original(source, runtime_lod)
-        kept = []
-        removed = []
+        kept, removed = [], []
+        repaired = 0
         for node, mesh in selected:
             if _is_road_or_vehicle(builder, node, mesh):
                 removed.append((node, builder.material_name(mesh), int(len(mesh.faces))))
                 continue
+            repaired += int(repair_closed_inward(mesh))
             kept.append((node, mesh))
-        print(
-            f"R6.1.4 manufacturing road/vehicle filter lod{runtime_lod}: "
-            f"removed={len(removed)} kept={len(kept)}"
-        )
+        print(f"R6.1.6 manufacturing filter lod{runtime_lod}: "
+              f"removed={len(removed)} kept={len(kept)} outwardRepaired={repaired}")
         for node, material, triangles in removed[:100]:
             print(f"  removed component node={node} material={material} triangles={triangles}")
         return kept
-
     builder.select_source_meshes = filtered
 
 
@@ -89,7 +81,6 @@ def main() -> int:
     sys.argv = [str(ROOT / "scripts" / "build-r61-assets.py")]
     builder.main()
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

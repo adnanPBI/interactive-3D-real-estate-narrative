@@ -42,8 +42,6 @@ jobs:
         with:
           python-version: '3.13.5'
       - run: npm ci --no-audit --no-fund
-      - name: Retain installed public dependencies for offline reproduction
-        run: tar -czf artifacts/cinematic/node-dependencies.tar.gz node_modules
       - name: Typecheck
         run: npm run typecheck
       - name: Build same generated assets as production
@@ -52,6 +50,7 @@ jobs:
         run: |
           node --test tests/r616-cinematic.test.mjs
           python3 tests/test_r616_geometry.py
+          python3 tests/test_r61_source_identity.py
       - run: pip install -r requirements-acceptance.txt
       - run: playwright install --with-deps chromium
       - name: Capture all six chapters
@@ -62,9 +61,6 @@ jobs:
             sleep 1
           done
           python3 scripts/qa-r616-cinematic.py --url http://127.0.0.1:3000 --out artifacts/cinematic/chapters
-      - name: Record authoring dependency versions
-        if: always()
-        run: python3 -m pip list --format=json > artifacts/cinematic/python-packages.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -72,6 +68,5 @@ jobs:
           path: |
             artifacts/cinematic
             artifacts/r6-cpu-fallback-proof.json
-            assets-source/r6/heroes/manufacturing-line/visual-master.glb
             assets-source/r6/heroes/manufacturing-line/source-manifest.json
           retention-days: 14
