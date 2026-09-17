@@ -1,12 +1,15 @@
 import type { NextConfig } from "next";
 
-const isVercel = process.env.VERCEL === "1";
+// Render currently starts the service with `next start`, which requires the normal
+// Next.js build layout. Standalone output is opt-in for container images only.
+// This avoids the unsupported `next start` + `output: standalone` combination that
+// was present in the R6.1.7 production deployment.
+const useStandaloneOutput = process.env.NEXT_OUTPUT_STANDALONE === "1";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  // Vercel owns Next.js tracing/output. Standalone stays available for Docker.
-  output: isVercel ? undefined : "standalone",
+  output: useStandaloneOutput ? "standalone" : undefined,
   experimental: {
     optimizePackageImports: ["three", "@react-three/fiber", "gsap"],
   },
