@@ -50,7 +50,7 @@ export function EnvironmentProbe() {
         ] as const) {
           const panel = new THREE.Mesh(new THREE.PlaneGeometry(width, height),
             new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(energy), toneMapped: false }));
-          panel.position.set(...position);
+          panel.position.set(position[0], position[1], position[2]);
           panel.lookAt(0, 0, 0);
           probe.add(panel);
           panels.push(panel);
