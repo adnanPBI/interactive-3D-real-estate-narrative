@@ -22,6 +22,7 @@ jobs:
       NEXT_PUBLIC_ALLOW_INDEXING: '0'
       DEPLOYMENT_TIER: staging
       ENABLE_ACCEPTANCE_QA: '1'
+      R6_ACCEPTANCE_REQUIRE_IMMERSIVE: '1'
       BUILD_ID: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +40,7 @@ jobs:
           node-version-file: .nvmrc
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13.5'
       - run: npm ci --no-audit --no-fund
       - name: Build same generated assets as production
         run: RENDER=true npm run build
@@ -47,7 +48,8 @@ jobs:
         run: npm run typecheck
       - name: Cinematic regression tests
         run: |
-          if test -f tests/r616-cinematic.test.mjs; then node --test tests/r616-cinematic.test.mjs; fi
+          node --test tests/r616-cinematic.test.mjs
+          python3 tests/test_r616_geometry.py
       - run: pip install -r requirements-acceptance.txt
       - run: playwright install --with-deps chromium
       - name: Capture all six chapters
@@ -57,7 +59,7 @@ jobs:
             if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then break; fi
             sleep 1
           done
-          python3 scripts/acceptance_qa.py --url http://127.0.0.1:3000 --six-chapter-proof-only --no-fps-gate --out artifacts/cinematic/chapters
+          python3 scripts/qa-r616-cinematic.py --url http://127.0.0.1:3000 --out artifacts/cinematic/chapters
       - uses: actions/upload-artifact@v4
         if: always()
         with:
