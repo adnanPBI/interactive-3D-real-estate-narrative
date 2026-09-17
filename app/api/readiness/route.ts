@@ -9,12 +9,15 @@ function pair(a?: string, b?: string) {
 }
 
 export async function GET() {
-  // Build-time public settings come from the generated metadata artifact rather
-  // than runtime NEXT_PUBLIC_* variables, preventing readiness from reporting a
-  // different configuration than the client bundle that was actually built.
-  const assetSet = buildMetadata.assetSet === "approved" ? "approved" : "stage3";
+  // Report the asset set that was actually baked into the client bundle. R6 is a
+  // first-class runtime set and must not be mislabeled as stage3.
+  const assetSet = buildMetadata.assetSet;
   const brandSet = buildMetadata.brandSet === "approved" ? "approved" : "stage4";
   const approvedAssetsPresent = buildMetadata.approvedAssetsPresent === true;
+  const r6RuntimeAssetsPresent = buildMetadata.r6RuntimeAssetsPresent === true;
+  const runtimeAssetsPresent = assetSet === "r6" ? r6RuntimeAssetsPresent
+    : assetSet === "approved" ? approvedAssetsPresent
+      : true;
   const approvedBrandPresent = buildMetadata.approvedBrandPresent === true;
   const contentApproved = buildMetadata.contentApproval.valid === true;
   const contactDeliveryConfigured = Boolean(
@@ -26,12 +29,15 @@ export async function GET() {
   const indexing = buildMetadata.allowIndexing === true;
   const tier = process.env.DEPLOYMENT_TIER || buildMetadata.deploymentTier || "development";
   const buildId = process.env.BUILD_ID || buildMetadata.buildId || "unknown";
+  const gitCommit = process.env.RENDER_GIT_COMMIT || buildMetadata.gitCommit || "unknown";
   let canonicalHttps = false;
   try { canonicalHttps = new URL(buildMetadata.siteUrl || "").protocol === "https:"; } catch {}
   const buildIdentified = !["", "local", "unknown"].includes(buildId);
 
   const checks = {
     assetSet,
+    runtimeAssetsPresent,
+    r6RuntimeAssetsPresent,
     approvedAssetsPresent,
     brandSet,
     approvedBrandPresent,
@@ -44,7 +50,8 @@ export async function GET() {
     indexing,
   };
 
-  const previewReady = contactDeliveryConfigured;
+  const previewReady = contactDeliveryConfigured && runtimeAssetsPresent;
+  // Formal release approval remains intentionally stricter than R6 runtime health.
   const releaseBaseReady = previewReady && assetSet === "approved" && approvedAssetsPresent &&
     brandSet === "approved" && approvedBrandPresent && contentApproved && turnstileConfigured &&
     durableRateLimitConfigured && canonicalHttps && buildIdentified;
@@ -57,6 +64,7 @@ export async function GET() {
     stage: 6,
     deploymentTier: tier,
     buildId,
+    gitCommit,
     buildMetadataGeneratedAt: buildMetadata.generatedAt,
     buildConfigDigest: buildMetadata.configDigest,
     releaseSourceDigest: buildMetadata.releaseSourceDigest,
