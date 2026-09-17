@@ -51,6 +51,7 @@ jobs:
           node --test tests/r616-cinematic.test.mjs
           python3 tests/test_r616_geometry.py
           python3 tests/test_r61_source_identity.py
+          python3 tests/test_r617_no_flicker.py
       - run: pip install -r requirements-acceptance.txt
       - run: playwright install --with-deps chromium
       - name: Capture all six chapters
