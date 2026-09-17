@@ -59,7 +59,7 @@ export function AccessibilityMenu() {
     <div ref={panelRef} className="a11y-popover" id="a11y-preferences" role="dialog" aria-label="Accessibility preferences" aria-modal="false" data-open={open}>
       <div className="a11y-popover__head"><strong>Accessibility</strong><button type="button" onClick={() => { setOpen(false); triggerRef.current?.focus(); }} aria-label="Close accessibility preferences">×</button></div>
       <label><input type="checkbox" checked={contrast} onChange={(event) => setContrast(event.target.checked)} /><span><strong>High contrast</strong><small>Increase UI contrast over the 3D stage.</small></span></label>
-      <label><input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} /><span><strong>Reduce motion</strong><small>Replace cinematic WebGL motion with the static six-frame story.</small></span></label>
+      <label><input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} /><span><strong>Reduce motion</strong><small>Keep the 3D hero visible while freezing camera drift and ambient animation.</small></span></label>
       <a href={pathname === "/" ? "#accessibility-host" : "/#accessibility-host"} onClick={() => setOpen(false)}>Open accessible 3D equivalent</a>
     </div>
   </div>;
