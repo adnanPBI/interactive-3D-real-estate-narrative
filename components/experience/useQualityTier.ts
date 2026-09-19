@@ -16,6 +16,8 @@ function detectRenderer() {
     if (!gl) return { webgl: false, renderer: "" };
     const ext = gl.getExtension("WEBGL_debug_renderer_info") as { UNMASKED_RENDERER_WEBGL: number } | null;
     const renderer = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) ?? "") : "";
+    // Release the probe context immediately; the real R3F canvas gets its own context.
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
     return { webgl: true, renderer };
   } catch {
     return { webgl: false, renderer: "" };
@@ -28,10 +30,9 @@ function chooseQuality(): Quality {
 
   const params = new URLSearchParams(window.location.search);
   const forced = params.get("quality");
-  if (forced === "high" || forced === "medium" || forced === "fallback") return forced;
+  if (forced === "fallback") return "fallback";
+  if (forced === "high" || forced === "medium") return forced;
 
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    || document.documentElement.dataset.motion === "reduced";
   const nav = navigator as NavigatorWithHints;
   const cores = nav.hardwareConcurrency ?? 8;
   const memory = nav.deviceMemory ?? 8;
@@ -40,12 +41,13 @@ function chooseQuality(): Quality {
   const integratedIntel = /Intel.*(?:UHD|Iris)|(?:UHD|Iris).*Intel/i.test(renderer);
   const weakRenderer = /SwiftShader|llvmpipe|Software/i.test(renderer);
 
-  if (reduced || weakRenderer || cores <= 2 || memory <= 2) return "fallback";
+  // Reduced motion is an animation preference, not a request to remove the 3D
+  // hero. Camera/ambient motion already reads documentElement.dataset.motion and
+  // becomes stationary. Keep the rendered model visible.
+  if (weakRenderer || cores <= 2 || memory <= 2) return "fallback";
   if (saveData || slowConnection || cores <= 4 || memory <= 4 || window.innerWidth < 820) return "medium";
 
   // Do not demote a capable desktop solely because it uses Intel Iris/UHD.
-  // The old rule forced many modern Windows laptops into lod1, which reduced the
-  // manufacturing hero from ~77k triangles to ~12k and visibly destroyed detail.
   if (integratedIntel && (cores <= 6 || memory < 8)) return "medium";
   return "high";
 }

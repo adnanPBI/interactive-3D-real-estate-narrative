@@ -154,16 +154,26 @@ export function HeroAsset({ hero, lod, definition, quality, onReady }: {
     renderer.shadowMap.needsUpdate = true;
   }, [assetUrl, authored, renderer]);
 
+  // Geometry readiness is the release gate for showing the scene. Optional KTX2
+  // detail may arrive a little later and must never leave a valid GLB hidden behind
+  // an endless loading state.
   useEffect(() => {
     if (!instance) return;
-    const texturesReady = hero === "manufacturing-line" ? Boolean(premiumTextures) : Boolean(legacyTextures);
-    if (!texturesReady) return;
     renderer.shadowMap.needsUpdate = true;
     let raf1 = 0;
     let raf2 = 0;
     raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(() => onReady?.()); });
     return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
-  }, [hero, instance, legacyTextures, onReady, premiumTextures, renderer]);
+  }, [instance, onReady, renderer]);
+
+  // A failed or stalled hero should never produce the blank sky/ground state seen
+  // in production. Escalate to the authored static scene instead.
+  useEffect(() => {
+    if (!failed || typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent("convalt:webgl-fatal", {
+      detail: { reason: `hero-load-failed:${hero}:${lod}` },
+    }));
+  }, [failed, hero, lod]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !instance) return;

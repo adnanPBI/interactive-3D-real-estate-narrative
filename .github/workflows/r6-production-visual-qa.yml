@@ -1,6 +1,8 @@
 name: R6 Production Visual QA
 
 on:
+  push:
+    branches: [main]
   workflow_run:
     workflows: ["Deploy R6 Hero Fidelity to Vercel"]
     types: [completed]
@@ -18,9 +20,11 @@ permissions:
 jobs:
   capture:
     if: >-
+      github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -31,16 +35,21 @@ jobs:
       - name: Install visual QA driver
         run: python -m pip install --disable-pip-version-check selenium==4.35.0 Pillow==12.3.0
 
-      - name: Resolve deployed URL from source workflow
+      - name: Resolve deployed URL
         id: deploy
         env:
           GH_TOKEN: ${{ github.token }}
           MANUAL_URL: ${{ inputs.url }}
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
+          EXPECTED_SHA=""
           if [ -n "${MANUAL_URL:-}" ]; then
             URL="$MANUAL_URL"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            URL="https://convalt-energy-r612-prod.onrender.com"
+            EXPECTED_SHA="$GITHUB_SHA"
           else
             test -n "${SOURCE_RUN_ID:-}" || { echo "::error::No source workflow run id"; exit 2; }
             mkdir -p /tmp/r6-deploy-log
@@ -51,29 +60,39 @@ jobs:
             unzip -q /tmp/r6-deploy.zip -d /tmp/r6-deploy-log
             URL=$(grep -Eho 'https://[A-Za-z0-9._-]+\.vercel\.app' /tmp/r6-deploy-log/* | tail -n 1 || true)
           fi
-          test -n "${URL:-}" || { echo "::error::Unable to resolve Vercel deployment URL"; exit 4; }
+          test -n "${URL:-}" || { echo "::error::Unable to resolve deployment URL"; exit 4; }
           URL="${URL%/}"
           echo "Resolved production URL: $URL"
           echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "expected_sha=$EXPECTED_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for production readiness
+      - name: Wait for exact production build and R6 assets
         env:
           URL: ${{ steps.deploy.outputs.url }}
+          EXPECTED_SHA: ${{ steps.deploy.outputs.expected_sha }}
         run: |
           set -euo pipefail
-          for i in $(seq 1 36); do
-            CODE=$(curl -L -sS -o /tmp/r6-home.html -w '%{http_code}' "$URL" || true)
+          for i in $(seq 1 72); do
+            CODE=$(curl -L -sS -o /tmp/r6-health.json -w '%{http_code}' "$URL/api/health" || true)
             if [ "$CODE" = "200" ]; then
-              echo "Production homepage returned HTTP 200."
-              exit 0
+              COMMIT=$(jq -r '.gitCommit // "unknown"' /tmp/r6-health.json 2>/dev/null || echo unknown)
+              ASSET_SET=$(jq -r '.assetSet // "unknown"' /tmp/r6-health.json 2>/dev/null || echo unknown)
+              ASSETS=$(jq -r '.r6RuntimeAssetsPresent // false' /tmp/r6-health.json 2>/dev/null || echo false)
+              if [ "$ASSET_SET" = "r6" ] && [ "$ASSETS" = "true" ] && { [ -z "$EXPECTED_SHA" ] || [ "$COMMIT" = "$EXPECTED_SHA" ]; }; then
+                echo "Exact deployment is healthy: commit=$COMMIT assetSet=$ASSET_SET r6Assets=$ASSETS"
+                exit 0
+              fi
+              echo "Attempt $i: health=200 commit=$COMMIT assetSet=$ASSET_SET r6Assets=$ASSETS; waiting for target build..."
+            else
+              echo "Attempt $i: health HTTP ${CODE:-none}; retrying..."
             fi
-            echo "Attempt $i: HTTP ${CODE:-none}; retrying..."
-            sleep 5
+            sleep 10
           done
-          echo "::error::Production homepage did not become ready"
+          echo "::error::Target production build/R6 assets did not become ready"
+          cat /tmp/r6-health.json || true
           exit 5
 
-      - name: Capture six production hero chapters
+      - name: Capture and validate six production hero chapters
         env:
           BASE_URL: ${{ steps.deploy.outputs.url }}
         run: |
@@ -86,13 +105,17 @@ jobs:
           from pathlib import Path
           from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
-          from PIL import Image
+          from PIL import Image, ImageStat
           from selenium import webdriver
           from selenium.common.exceptions import TimeoutException
           from selenium.webdriver.chrome.options import Options
           from selenium.webdriver.common.by import By
           from selenium.webdriver.support.ui import WebDriverWait
 
+          HEROES = [
+              'integrated-campus', 'manufacturing-line', 'substation-bess',
+              'data-center-cooling', 'recycling-intake', 'connected-campus',
+          ]
           out = Path('visual-qa/r6')
           base = os.environ['BASE_URL'].rstrip('/')
           parts = urlsplit(base)
@@ -113,23 +136,29 @@ jobs:
 
           driver = webdriver.Chrome(options=options)
           driver.set_window_size(1600, 900)
-          manifest = {'url': url, 'chapters': [], 'browserLogSevere': []}
+          manifest = {'url': url, 'chapters': [], 'browserLogSevere': [], 'reducedMotionHeroVisible': False}
           try:
               driver.get(url)
               wait = WebDriverWait(driver, 90)
               wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, '.story-progress .progress-dot')) == 6)
-              wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, 'canvas')) >= 1)
-              # Allow KTX2 decode, GLB upload, SMAA shader warmup and first camera settle.
-              time.sleep(8)
+              wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, '.experience-canvas canvas')) == 1)
+              wait.until(lambda d: bool(d.execute_script('return window.__CONVALT_ACTIVE_HERO__?.ready === true')))
+              wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, '[data-r6-loading-cover="true"]')) == 0)
+              if driver.find_elements(By.CSS_SELECTOR, '[data-r6-static-fallback="true"]'):
+                  raise RuntimeError('Forced high-quality run unexpectedly entered static fallback')
 
-              for index in range(6):
+              for index, expected_hero in enumerate(HEROES):
                   dots = driver.find_elements(By.CSS_SELECTOR, '.story-progress .progress-dot')
                   if len(dots) != 6:
                       raise RuntimeError(f'Expected 6 progress dots, found {len(dots)}')
                   driver.execute_script('arguments[0].click()', dots[index])
                   wait.until(lambda d, i=index: d.find_elements(By.CSS_SELECTOR, '.story-progress .progress-dot')[i].get_attribute('data-active') == 'true')
-                  time.sleep(3.0 if index else 1.0)
+                  wait.until(lambda d, hero=expected_hero: d.execute_script('return window.__CONVALT_ACTIVE_HERO__?.ready === true && window.__CONVALT_ACTIVE_HERO__?.hero === arguments[0]', hero))
+                  time.sleep(2.2 if index else 0.8)
 
+                  if driver.find_elements(By.CSS_SELECTOR, '[data-r6-static-fallback="true"]'):
+                      raise RuntimeError(f'Chapter {index+1} unexpectedly entered static fallback')
+                  hero_state = driver.execute_script('return window.__CONVALT_ACTIVE_HERO__')
                   active = driver.find_element(By.CSS_SELECTOR, '.story-chapter[data-active="true"]')
                   title_el = active.find_element(By.CSS_SELECTOR, 'h1, h2')
                   title = title_el.text.strip()
@@ -138,6 +167,12 @@ jobs:
                   with Image.open(path) as image:
                       if image.size != (1600, 900):
                           raise RuntimeError(f'{path}: expected 1600x900, got {image.size}')
+                      # Guard against the exact production failure: copy was visible
+                      # while the entire hero side of the stage was nearly uniform.
+                      right = image.convert('L').crop((620, 90, 1540, 820))
+                      stddev = ImageStat.Stat(right).stddev[0]
+                      if stddev < 6.0:
+                          raise RuntimeError(f'{path}: hero-side image variance too low ({stddev:.2f})')
                   copy_rect = driver.execute_script('return arguments[0].querySelector(".story-copy").getBoundingClientRect().toJSON()', active)
                   viewport_ok = copy_rect['left'] >= 0 and copy_rect['top'] >= 0 and copy_rect['right'] <= 1600 and copy_rect['bottom'] <= 900
                   if not viewport_ok:
@@ -145,20 +180,31 @@ jobs:
                   manifest['chapters'].append({
                       'index': index + 1,
                       'title': title,
+                      'hero': hero_state,
                       'file': path.name,
+                      'heroSideStddev': round(stddev, 3),
                       'copyRect': copy_rect,
                       'copyInsideViewport': viewport_ok,
                   })
 
+              # Regression proof for the user-facing defect: reduced motion keeps
+              # actual WebGL geometry and only freezes movement.
+              driver.execute_script("localStorage.setItem('convalt-motion','reduced')")
+              driver.refresh()
+              wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, '.experience-canvas canvas')) == 1)
+              wait.until(lambda d: bool(d.execute_script('return window.__CONVALT_ACTIVE_HERO__?.ready === true')))
+              if driver.find_elements(By.CSS_SELECTOR, '[data-r6-static-fallback="true"]'):
+                  raise RuntimeError('Reduced-motion preference removed the real WebGL hero')
+              manifest['reducedMotionHeroVisible'] = True
+
               severe = [entry for entry in driver.get_log('browser') if entry.get('level') == 'SEVERE']
               manifest['browserLogSevere'] = severe
-              # WebGL/KTX2 runtime failures are not acceptable even when the DOM remains visible.
               fatal_terms = ('webgl', 'ktx', 'texture', 'glb', 'shader', 'context lost')
               fatal = [entry for entry in severe if any(term in entry.get('message', '').lower() for term in fatal_terms)]
               if fatal:
                   raise RuntimeError('Severe browser errors related to the R6 renderer/assets: ' + json.dumps(fatal[:8]))
           except TimeoutException as exc:
-              raise RuntimeError('Timed out waiting for the R6 production experience') from exc
+              raise RuntimeError('Timed out waiting for visible R6 production hero geometry') from exc
           finally:
               (out / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
               driver.quit()

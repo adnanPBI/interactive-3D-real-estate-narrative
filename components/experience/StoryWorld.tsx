@@ -17,8 +17,6 @@ type RuntimeLod = "lod0";
 function targetLodFor(_hero: (typeof r6ChapterHero)[number], _quality: "high" | "medium"): RuntimeLod {
   // R6.1.5 visual-fidelity mode: every current LOD0 is below the 120k medium
   // triangle ceiling, so do not collapse non-manufacturing chapters to LOD1.
-  // This keeps façade trims, cooling plant, electrical detail and recycling
-  // equipment visible on the Windows/Intel medium tier seen in client review.
   return "lod0";
 }
 
@@ -61,7 +59,7 @@ export function StoryWorld({ quality, onFirstSceneReady }: { quality: "high" | "
       lod={rendered.lod}
       definition={definition}
       quality={quality}
-      onReady={rendered.chapter === 0 ? onFirstSceneReady : undefined}
+      onReady={onFirstSceneReady}
     />
   </>;
 }

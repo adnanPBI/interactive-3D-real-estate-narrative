@@ -11,8 +11,8 @@ test('R6 asset routing is coherent across models and fallbacks',()=>{
 });
 
 test('runtime failures can promote WebGL to static fallback',()=>{
- const home=read('components/experience/HomeExperience.tsx'); const canvas=read('components/experience/ExperienceCanvas.tsx');
- assert.match(home,/convalt:webgl-fatal/); assert.match(home,/runtimeFallback/); assert.match(canvas,/webglcontextlost/);
+ const home=read('components/experience/HomeExperience.tsx'); const canvas=read('components/experience/ExperienceCanvas.tsx'); const asset=read('components/experience/useSceneAsset.ts');
+ assert.match(home,/convalt:webgl-fatal/); assert.match(home,/runtimeFallback/); assert.match(canvas,/webglcontextlost/); assert.match(asset,/HERO_LOAD_TIMEOUT_MS/);
 });
 
 test('release KTX2 assigns linear transfer to data maps and scans all runtime maps',()=>{
@@ -27,7 +27,7 @@ test('benchmark retains long stalls and rejects fallback renderer',()=>{
 
 test('chapter preloading targets displayed LOD and outgoing hero waits for replacement',()=>{
  const preload=read('components/experience/AssetPreloader.tsx'); const world=read('components/experience/StoryWorld.tsx');
- assert.match(preload,/r6HeroUrl\(r6ChapterHero\[i\], activeLod\)/); assert.match(world,/assetManager\.prefetch/); assert.match(world,/setRenderedChapter/);
+ assert.match(preload,/r6HeroUrl\(r6ChapterHero\[i\], activeLod\)/); assert.match(world,/assetManager\.prefetch/); assert.match(world,/if \(alive && asset\) setRendered\(\{ chapter: activeChapter, lod \}\)/);
 });
 
 test('contact and Turnstile lifecycle are bounded',()=>{
