@@ -61,6 +61,22 @@ def build_scene(r4, scene_id: str, skip_buildings: set[tuple[float, float]], sup
     finally:
         for name, fn in originals.items():
             setattr(r4, name, fn)
+
+    # The integrated-campus rear Water strip was removed from the R4 source
+    # because in the production hero camera it read as the long road-like slab
+    # marked by the user. Fail the build if that strip (or another Water mesh)
+    # is accidentally reintroduced into this first hero.
+    if scene_id == "hero-campus":
+        water_geometry = [
+            name for name, geom in scene.geometry.items()
+            if getattr(getattr(getattr(geom, "visual", None), "material", None), "name", "") == "Water"
+        ]
+        if water_geometry:
+            raise RuntimeError(
+                "Integrated-campus marked rear strip must remain absent; "
+                f"unexpected Water geometry: {water_geometry}"
+            )
+
     return scene, removed
 
 
