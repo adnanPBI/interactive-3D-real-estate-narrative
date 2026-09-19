@@ -33,6 +33,12 @@ class NoFlickerTests(unittest.TestCase):
         self.assertTrue(np.isfinite(scene.bounds).all())
         self.assertGreater(scene.bounds[1][1],3.8)
 
+    def test_integrated_campus_keeps_marked_rear_strip_removed(self):
+        source=(ROOT/'scripts/generate-r4-assets.py').read_text()
+        hero=source.split('def hero_scene():',1)[1].split('def manufacturing_scene():',1)[0]
+        self.assertNotIn('b.box((21,.03,1.4),(0,.02,-5.7),"Water")', hero)
+        self.assertIn('user-marked area that must remain clear', hero)
+
     def test_r6_authoring_removed_known_overlap_sources(self):
         integrated=(ROOT/'assets-source/r6/authoring/hero_integrated.py').read_text()
         data=(ROOT/'assets-source/r6/authoring/hero_datacenter.py').read_text()
