@@ -677,8 +677,9 @@ def service_lane_details(b:Builder,x0,x1,z,scale=1.):
 def hero_scene():
     b=Builder("r4_hero")
     b.box((20,.16,13),(0,-.08,0),"Ground",repeat=(10,7)); mountain_ridge(b,z=-7.0,width=22,height=3.4,seed=1); mountain_ridge(b,z=-8.0,width=25,height=2.2,seed=11)
-    # lake / distant water strip
-    b.box((21,.03,1.4),(0,.02,-5.7),"Water")
+    # Deliberately omit the former rear water strip. In the integrated-campus
+    # hero camera it reads as a long access road behind the building/turbines,
+    # which is the user-marked area that must remain clear.
     road(b,(0,0,1.45),18,1.15,"x"); road(b,(-1.5,0,-.4),8.5,1.0,"z")
     building_shell(b,(-2.7,0,-1.4),(5.6,2.2,3.0),"Facade",True,6,3)
     building_shell(b,(3.4,0,-2.2),(4.1,2.0,2.5),"Graphite",True,6,0)
